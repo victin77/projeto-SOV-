@@ -1,0 +1,205 @@
+/* --- VARIÁVEIS E RESET --- */
+:root {
+    --primary: #2563eb;
+    --primary-dark: #1e40af;
+    --bg-body: #f3f4f6;
+    --bg-card: #ffffff;
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --border: #e2e8f0;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+    --success: #10b981;
+    --sidebar-width: 260px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+
+body { background-color: var(--bg-body); color: var(--text-main); height: 100vh; display: flex; overflow: hidden; }
+
+/* --- SIDEBAR --- */
+aside {
+    width: var(--sidebar-width);
+    background-color: #0f172a;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #334155;
+}
+.brand { padding: 24px; border-bottom: 1px solid #1e293b; }
+.brand h1 { font-size: 20px; font-weight: 700; color: #60a5fa; letter-spacing: -0.5px; }
+.brand span { font-size: 12px; color: #94a3b8; font-weight: 400; }
+
+nav { flex: 1; padding: 20px 10px; }
+nav button {
+    width: 100%;
+    background: none;
+    border: none;
+    color: #94a3b8;
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.2s;
+}
+nav button:hover { background-color: #1e293b; color: white; }
+nav button.active { background-color: var(--primary); color: white; box-shadow: 0 4px 12px rgba(37,99,235,0.3); }
+
+.user-profile { padding: 20px; border-top: 1px solid #1e293b; display: flex; align-items: center; gap: 12px; }
+.avatar { width: 36px; height: 36px; background-color: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; }
+
+/* --- MAIN CONTENT --- */
+main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+header {
+    height: 70px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 32px;
+}
+header h2 { font-size: 18px; font-weight: 600; }
+
+.btn-primary {
+    background-color: var(--primary);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.2s;
+}
+.btn-primary:hover { background-color: var(--primary-dark); }
+
+#view-container { flex: 1; overflow: auto; padding: 24px; }
+
+/* --- DASHBOARD STYLES --- */
+.stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 32px; }
+.stat-card {
+    background: white; padding: 24px; border-radius: 12px;
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    display: flex; justify-content: space-between; align-items: start;
+}
+.stat-value { font-size: 32px; font-weight: 700; margin-top: 8px; line-height: 1; }
+.stat-label { font-size: 13px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); }
+
+.alert-section { background: white; border-radius: 12px; border: 1px solid var(--border); overflow: hidden; }
+.alert-header { padding: 16px 24px; border-bottom: 1px solid var(--border); background: #fef2f2; color: #991b1b; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+
+.lead-list-item {
+    padding: 16px 24px; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+    cursor: pointer; transition: background 0.1s;
+}
+.lead-list-item:hover { background-color: #f8fafc; }
+
+/* --- KANBAN STYLES --- */
+.kanban-board { display: flex; gap: 16px; height: 100%; overflow-x: auto; padding-bottom: 10px; }
+.kanban-column {
+    min-width: 280px; width: 280px;
+    background: #f1f5f9; border-radius: 8px;
+    display: flex; flex-direction: column;
+    border: 1px solid var(--border);
+}
+.kanban-header {
+    padding: 12px; font-size: 14px; font-weight: 600; color: var(--text-main);
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    display: flex; justify-content: space-between;
+}
+.count-badge { background: rgba(255,255,255,0.6); border-radius: 4px; padding: 2px 6px; font-size: 11px; }
+
+.kanban-cards { flex: 1; padding: 8px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+
+.kanban-card {
+    background: white; padding: 12px; border-radius: 6px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    cursor: grab; border: 1px solid transparent;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+.kanban-card:hover { box-shadow: 0 4px 6px rgba(0,0,0,0.05); transform: translateY(-2px); border-color: #cbd5e1; }
+
+.card-tags { display: flex; gap: 6px; margin-bottom: 8px; }
+.tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; text-transform: uppercase; }
+.tag-imovel { background: #dbeafe; color: #1e40af; }
+.tag-auto { background: #fce7f3; color: #9d174d; }
+.tag-agro { background: #dcfce7; color: #166534; }
+
+.card-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; color: var(--text-main); }
+.card-info { font-size: 12px; color: var(--text-muted); display: flex; gap: 8px; align-items: center; }
+
+.status-pill {
+    font-size: 11px; display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 12px; margin-top: 8px;
+}
+.status-late { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+.status-today { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+.status-future { background: #f1f5f9; color: #475569; }
+
+/* --- MODAL STYLES --- */
+.modal-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5); z-index: 100;
+    display: none; align-items: center; justify-content: center;
+    backdrop-filter: blur(2px);
+}
+.modal-overlay.open { display: flex; }
+
+.modal-content {
+    background: white; width: 900px; height: 85vh;
+    border-radius: 12px; display: flex; flex-direction: column;
+    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+    overflow: hidden;
+}
+
+.modal-header { padding: 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: #f8fafc; }
+.modal-body { display: flex; flex: 1; overflow: hidden; }
+.modal-sidebar { width: 320px; background: white; border-right: 1px solid var(--border); padding: 24px; overflow-y: auto; }
+.modal-main { flex: 1; padding: 24px; overflow-y: auto; background: #fcfcfc; }
+
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
+.form-control { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
+
+.timeline-item { display: flex; gap: 12px; margin-bottom: 24px; position: relative; }
+.timeline-item::before { content: ''; position: absolute; left: 14px; top: 28px; bottom: -24px; width: 2px; background: #e2e8f0; }
+.timeline-item:last-child::before { display: none; }
+.timeline-icon { width: 30px; height: 30px; border-radius: 50%; background: #e0f2fe; color: var(--primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; z-index: 1; }
+.timeline-content { background: white; border: 1px solid var(--border); padding: 12px; border-radius: 8px; width: 100%; }
+
+/* Cards no Kanban */
+.card-origin { font-size: 10px; font-weight: 700; color: var(--primary); text-transform: uppercase; margin-bottom: 5px; }
+.card-next-step { font-size: 11px; color: var(--success); margin-top: 8px; border-top: 1px dashed #eee; padding-top: 5px; }
+
+/* Modal de Tarefas */
+.task-input-group { display: flex; gap: 10px; margin-bottom: 20px; background: #f8fafc; padding: 15px; border-radius: 8px; }
+.task-input-group input { padding: 8px; border: 1px solid var(--border); border-radius: 4px; }
+.task-input-group button { background: var(--primary); color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; }
+
+.task-item { 
+    display: flex; justify-content: space-between; align-items: center; 
+    padding: 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; background: white;
+}
+.task-item.completed { opacity: 0.6; background: #f1f5f9; border-style: dashed; }
+.task-item.completed .task-info span { text-decoration: line-through; }
+.task-info { display: flex; flex-direction: column; }
+.task-info small { color: var(--text-muted); font-size: 11px; }
+
+.task-item button { 
+    background: white; border: 1px solid var(--success); color: var(--success); 
+    padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;
+}
+.task-item button:hover { background: var(--success); color: white; }
+
+/* Estilo para campos de Perda */
+#loss-fields { background: #fff1f1; padding: 15px; border-radius: 8px; margin-top: 10px; border: 1px solid #fecaca; }

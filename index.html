@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOV - Sistema de Organização de Vendas</title>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <aside>
+        <div class="brand">
+            <h1>SOV <i class="ph ph-lightning" style="color:#fbbf24"></i></h1>
+            <span>Sistema Oficial de Vendas</span>
+        </div>
+        <nav>
+            <button class="nav-btn active" onclick="switchView('dashboard')">
+                <i class="ph ph-squares-four"></i> Dashboard
+            </button>
+            <button class="nav-btn" onclick="switchView('kanban')">
+                <i class="ph ph-kanban"></i> Pipeline
+            </button>
+        </nav>
+        <div class="user-profile">
+            <div class="avatar">JD</div>
+            <div>
+                <div style="font-size: 14px; font-weight: 600;">João Doe</div>
+                <div style="font-size: 11px; color: #94a3b8;">Consultor</div>
+            </div>
+        </div>
+    </aside>
+
+    <main>
+        <header>
+            <h2 id="page-title">Visão Geral</h2>
+            <button class="btn-primary" onclick="openNewLeadModal()">
+                <i class="ph ph-plus-circle" style="font-size: 18px;"></i> Novo Lead Rápido
+            </button>
+        </header>
+
+        <div id="view-container"></div>
+    </main>
+
+    <div id="lead-modal" class="modal-overlay"></div>
+
+    <div id="new-lead-modal" class="modal-overlay">
+        <div class="modal-content" style="width: 400px; height: auto;">
+            <div class="modal-header">
+                <h3>Novo Lead</h3>
+                <i class="ph ph-x" style="cursor: pointer; font-size: 20px;" onclick="closeModal('new-lead-modal')"></i>
+            </div>
+            <div style="padding: 24px;">
+                <div class="form-group">
+                    <label>Nome do Cliente</label>
+                    <input type="text" id="new-lead-name" class="form-control" placeholder="Ex: Ana Silva">
+                </div>
+                <div class="form-group">
+                    <label>Telefone / WhatsApp</label>
+                    <input type="text" id="new-lead-phone" class="form-control" placeholder="(00) 00000-0000">
+                </div>
+                <div class="form-group">
+                    <label>Origem (Ex: Instagram, Indicação)</label>
+                    <input type="text" id="new-lead-origin" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Valor Estimado</label>
+                    <input type="number" id="new-lead-value" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Interesse</label>
+                    <select id="new-lead-type" class="form-control">
+                        <option value="Imóvel">Imóvel</option>
+                        <option value="Auto">Automóvel</option>
+                        <option value="Agro">Agro / Pesados</option>
+                    </select>
+                </div>
+                <button class="btn-primary" style="width: 100%; justify-content: center;" onclick="saveNewLead()">Salvar Lead</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
