@@ -19,6 +19,22 @@ app.use(express.static(path.join(__dirname, "dev")));
 
 // ========= API =========
 
+// excluir lead
+app.delete("/api/leads/:id", (req, res) => {
+  const leads = loadLeads();
+  const { id } = req.params;
+
+  const index = leads.findIndex(l => l.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: "Lead não encontrado" });
+  }
+
+  leads.splice(index, 1);
+  saveLeads(leads);
+
+  res.json({ ok: true });
+});
+
 // buscar leads
 app.get("/api/leads", (req, res) => {
   const leads = loadLeads();
@@ -51,19 +67,5 @@ app.listen(PORT, () => {
   console.log("SOV rodando na porta", PORT);
 });
 
-// EXCLUIR LEAD
-app.delete("/api/leads/:id", (req, res) => {
-  const leads = loadLeads();
-  const { id } = req.params;
 
-  const index = leads.findIndex(l => l.id === id);
-  if (index === -1) {
-    return res.status(404).json({ error: "Lead não encontrado" });
-  }
-
-  leads.splice(index, 1);
-  saveLeads(leads);
-
-  res.json({ ok: true });
-});
 
