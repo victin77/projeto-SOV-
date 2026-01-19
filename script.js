@@ -182,6 +182,10 @@ function renderKanban(container) {
                 <div class="val">R$ ${Number(lead.value).toLocaleString()}</div>
                 <div class="next">👣 ${lead.nextStep || 'Sem passo definido'}</div>
                 ${isAdmin() ? `<div class="next" style="margin-top:8px;opacity:.75">👤 ${lead.owner || 'admin'}</div>` : ''}
+				
+				<button class="btn-delete" onclick="deleteLead('${lead.id}')">
+    🗑 Excluir lead
+  </button>
             `;
             list.appendChild(card);
         });
@@ -480,3 +484,21 @@ function save() {
 }
 
 init();
+
+async function deleteLead(id) {
+  const confirmDelete = confirm("Tem certeza que deseja excluir este lead?");
+  if (!confirmDelete) return;
+
+  const res = await fetch(`/api/leads/${id}`, {
+    method: "DELETE"
+  });
+
+  if (!res.ok) {
+    alert("Erro ao excluir o lead");
+    return;
+  }
+
+  // Recarrega os leads após excluir
+  loadLeads();
+}
+
