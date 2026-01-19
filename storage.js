@@ -21,3 +21,4 @@ export function saveLeads(leads) {
   fs.writeFileSync(tmp, JSON.stringify(leads, null, 2));
   fs.renameSync(tmp, FILE);
 }
+ 
