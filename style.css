@@ -272,3 +272,18 @@ label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: 
 }
 .chart-controls .hint{ color: var(--muted); font-size: 12px; }
 .chart-controls select{ max-width: 240px; margin: 0; }
+
+.btn-delete {
+  margin-top: 8px;
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.btn-delete:hover {
+  background: #b91c1c;
+}
