@@ -1,53 +1,459 @@
 const STAGES = ['Novo lead', 'Qualificação', 'Simulação', 'Negociação', 'Fechado', 'Perdido'];
-// Usuários (para o select de "dono" quando for admin)
-const CONSULTORES = ['grazielle', 'pedro', 'poli', 'gustavo', 'victor', 'marcelo'];
-
-
 let leads = JSON.parse(localStorage.getItem('sov_crm_data')) || [];
 let currentView = 'kanban';
 let filterText = '';
 let salesChart = null;
 let currentChartType = localStorage.getItem('sov_chart_type') || 'bar';
 
-// --- Sessão / Permissões ---
-let session = null;
+// --- Sessão (front-end) ---
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 horas
+let currentSession = null;
+
+// --- Dados (JSON / backup local) ---
+const CRM_DATA_KEY = 'sov_crm_data';
+const CRM_BACKUPS_KEY = 'sov_crm_backups';
+const AUTO_BACKUP_KEY = 'sov_auto_backup';
+const MAX_BACKUPS = 10;
+let dataModalInitialized = false;
+
+// --- Backend (sincronização) ---
+const API_BASE = '';
+let backendOnline = false;
+
+async function detectBackend() {
+    try {
+        const res = await fetch(`${API_BASE}/api/ping`, { cache: 'no-store' });
+        backendOnline = !!(res && res.ok);
+    } catch {
+        backendOnline = false;
+    }
+    return backendOnline;
+}
+
+async function apiRequest(path, opts = {}) {
+    if (!currentSession || !currentSession.token) throw new Error('missing_token');
+    const method = opts.method || 'GET';
+    const headers = { ...(opts.headers || {}) };
+    headers.Authorization = `Bearer ${currentSession.token}`;
+    if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
+
+    const res = await fetch(`${API_BASE}${path}`, {
+        method,
+        headers,
+        body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined
+    });
+
+    if (res.status === 401) throw new Error('unauthorized');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        const err = new Error('api_error');
+        err.code = data && data.error ? data.error : 'api_error';
+        throw err;
+    }
+    return data;
+}
+
+async function apiMe() {
+    return apiRequest('/api/auth/me');
+}
+
+async function apiLogout() {
+    return apiRequest('/api/auth/logout', { method: 'POST' });
+}
+
+async function apiGetLeads() {
+    const data = await apiRequest('/api/leads');
+    return Array.isArray(data.leads) ? data.leads : [];
+}
+
+async function apiCreateLead(lead) {
+    const data = await apiRequest('/api/leads', { method: 'POST', body: lead });
+    return data.lead;
+}
+
+async function apiUpdateLead(id, lead) {
+    const data = await apiRequest(`/api/leads/${encodeURIComponent(String(id))}`, { method: 'PUT', body: lead });
+    return data.lead;
+}
+
+async function apiDeleteLead(id) {
+    await apiRequest(`/api/leads/${encodeURIComponent(String(id))}`, { method: 'DELETE' });
+}
+
+async function apiReplaceLeads(nextLeads) {
+    await apiRequest('/api/leads/replace', { method: 'POST', body: { leads: nextLeads } });
+}
 
 function getSession() {
+    const raw = localStorage.getItem('sov_session');
+    if (!raw) return null;
     try {
-        return JSON.parse(localStorage.getItem('sov_session') || 'null');
+        const s = JSON.parse(raw);
+        if (!s || !s.user || !s.role) return null;
+        const exp = typeof s.exp === 'number'
+            ? s.exp
+            : (typeof s.at === 'number' ? s.at + SESSION_TTL_MS : 0);
+        return { ...s, exp };
     } catch {
         return null;
     }
 }
 
-function isAdmin() {
-    return session && (session.role === 'admin' || session.user === 'admin');
+function isSessionExpired(session) {
+    return !session || typeof session.exp !== 'number' || Date.now() > session.exp;
 }
 
-function requireAuth() {
-    session = getSession();
-    if (!session || !session.user) {
-        window.location.href = 'login.html';
-        return false;
-    }
-    return true;
-}
-
-function logout() {
+function clearSession() {
     localStorage.removeItem('sov_session');
-    window.location.href = 'login.html';
 }
 
-function visibleLeads() {
-    if (isAdmin()) return leads;
-    const u = (session?.user || '').toLowerCase();
-    return leads.filter(l => (l.owner || 'admin') === u);
+function requireSession() {
+    const s = getSession();
+    if (!s) {
+        window.location.replace('login.html');
+        return null;
+    }
+    if (isSessionExpired(s)) {
+        clearSession();
+        window.location.replace('login.html?reason=expired');
+        return null;
+    }
+    return s;
 }
 
-function canEditLead(lead) {
-    if (isAdmin()) return true;
-    const u = (session?.user || '').toLowerCase();
-    return (lead.owner || 'admin') === u;
+function canWrite() {
+    return currentSession && currentSession.role !== 'leitura';
+}
+
+function isAutoBackupEnabled() {
+    return localStorage.getItem(AUTO_BACKUP_KEY) === '1';
+}
+
+function setAutoBackupEnabled(enabled) {
+    localStorage.setItem(AUTO_BACKUP_KEY, enabled ? '1' : '0');
+}
+
+function getBackups() {
+    const raw = localStorage.getItem(CRM_BACKUPS_KEY);
+    if (!raw) return [];
+    try {
+        const list = JSON.parse(raw);
+        return Array.isArray(list) ? list : [];
+    } catch {
+        return [];
+    }
+}
+
+function setBackups(list) {
+    localStorage.setItem(CRM_BACKUPS_KEY, JSON.stringify(list));
+}
+
+function maybeCreateBackupFromPersisted(opts = {}) {
+    const force = !!opts.force;
+    if (!canWrite()) return;
+    if (!force && !isAutoBackupEnabled()) return;
+
+    const prev = localStorage.getItem(CRM_DATA_KEY);
+    if (!prev) return;
+
+    const backups = getBackups();
+    const last = backups[backups.length - 1];
+    if (last && last.data === prev) return;
+
+    backups.push({ at: Date.now(), data: prev });
+    while (backups.length > MAX_BACKUPS) backups.shift();
+    setBackups(backups);
+}
+
+function sanitizeString(value, maxLen = 500) {
+    const s = (value ?? '').toString().trim();
+    return s.length > maxLen ? s.slice(0, maxLen) : s;
+}
+
+function sanitizePhone(value, maxLen = 30) {
+    const s = sanitizeString(value, maxLen);
+    return s.replace(/[^\d+()\-\s]/g, '');
+}
+
+function parseTags(input) {
+    const parts = sanitizeString(input, 2000)
+        .split(/[;,]/)
+        .map(t => t.trim().toLowerCase())
+        .filter(Boolean);
+    return Array.from(new Set(parts)).slice(0, 20);
+}
+
+function normalizeImportedLeads(payload) {
+    const inputLeads = Array.isArray(payload)
+        ? payload
+        : (payload && Array.isArray(payload.leads) ? payload.leads : null);
+    if (!inputLeads) return { ok: false, error: 'JSON inválido: esperado um array de leads ou um objeto { leads: [...] }.' };
+
+    const ids = new Set();
+    const normalized = [];
+    for (let i = 0; i < inputLeads.length; i++) {
+        const raw = inputLeads[i];
+        if (!raw || typeof raw !== 'object') continue;
+
+        let id =
+            (typeof raw.id === 'string' && raw.id) ? raw.id :
+                (typeof raw.id === 'number' ? raw.id : (Date.now() + i));
+        while (ids.has(id)) {
+            id = typeof id === 'number' ? (id + 1) : `${id}-${Math.random().toString(16).slice(2, 6)}`;
+        }
+        ids.add(id);
+
+        const name = sanitizeString(raw.name, 120);
+        if (!name) continue;
+
+        const stage = STAGES.includes(raw.stage) ? raw.stage : 'Novo lead';
+
+        const tasksRaw = Array.isArray(raw.tasks) ? raw.tasks : [];
+        const tasks = tasksRaw
+            .filter(t => t && typeof t === 'object')
+            .slice(0, 200)
+            .map(t => ({ desc: sanitizeString(t.desc, 160), done: !!t.done }))
+            .filter(t => t.desc);
+
+        const tagsRaw = Array.isArray(raw.tags)
+            ? raw.tags
+            : (typeof raw.tags === 'string' ? raw.tags.split(/[;,]/) : []);
+        const tags = Array.from(new Set(
+            tagsRaw.map(t => sanitizeString(t, 40).toLowerCase()).filter(Boolean)
+        )).slice(0, 20);
+
+        normalized.push({
+            id,
+            name,
+            phone: sanitizePhone(raw.phone, 30),
+            origin: sanitizeString(raw.origin, 60) || 'Geral',
+            value: Number(raw.value) || 0,
+            nextStep: sanitizeString(raw.nextStep, 160),
+            stage,
+            tasks,
+            lossReason: sanitizeString(raw.lossReason, 60),
+            obs: sanitizeString(raw.obs, 2000),
+            owner: sanitizeString(raw.owner, 60),
+            tags
+        });
+    }
+
+    return { ok: true, leads: normalized };
+}
+
+function downloadJson(filename, data) {
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 500);
+}
+
+function exportDataJson() {
+    const payload = {
+        schema: 'sov-crm',
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        leads
+    };
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadJson(`sov-crm-export-${stamp}.json`, payload);
+}
+
+async function importDataJson(file) {
+    if (!canWrite()) return;
+    if (!file) {
+        alert('Selecione um arquivo JSON.');
+        return;
+    }
+    const text = await file.text();
+    let parsed;
+    try {
+        parsed = JSON.parse(text);
+    } catch {
+        alert('Arquivo inválido: não foi possível ler o JSON.');
+        return;
+    }
+
+    const res = normalizeImportedLeads(parsed);
+    if (!res.ok) {
+        alert(res.error);
+        return;
+    }
+
+    const ok = confirm(`Importar ${res.leads.length} lead(s)?\n\nIsso vai SUBSTITUIR os leads atuais (${leads.length}).`);
+    if (!ok) return;
+
+    maybeCreateBackupFromPersisted({ force: true });
+    leads = res.leads;
+
+    if (backendOnline) {
+        try {
+            await apiReplaceLeads(leads);
+            leads = await apiGetLeads();
+        } catch (e) {
+            alert('Importado localmente, mas falhou ao enviar para o servidor.');
+        }
+    }
+
+    cacheLeads(leads);
+    renderApp();
+    alert('Importação concluída.');
+}
+
+function updateBackupMetaUI() {
+    const meta = document.getElementById('backup-meta');
+    const btnRestore = document.getElementById('btn-restore-backup');
+    const btnClear = document.getElementById('btn-clear-backups');
+    if (!meta || !btnRestore || !btnClear) return;
+
+    const backups = getBackups();
+    const last = backups[backups.length - 1];
+    const lastText = last ? new Date(last.at).toLocaleString() : '—';
+    meta.textContent = `Backups: ${backups.length} • Último: ${lastText}`;
+
+    const hasBackup = backups.length > 0;
+    btnRestore.disabled = !canWrite() || !hasBackup;
+    btnClear.disabled = !canWrite() || !hasBackup;
+}
+
+function initDataModal() {
+    if (dataModalInitialized) return;
+    dataModalInitialized = true;
+
+    const fileInput = document.getElementById('import-file');
+    const btnImport = document.getElementById('btn-import-json');
+    const btnExport = document.getElementById('btn-export-json');
+    const toggle = document.getElementById('auto-backup-toggle');
+    const btnRestore = document.getElementById('btn-restore-backup');
+    const btnClearBackups = document.getElementById('btn-clear-backups');
+    const btnClearData = document.getElementById('btn-clear-data');
+
+    if (btnExport) btnExport.onclick = exportDataJson;
+    if (btnImport) btnImport.onclick = () => importDataJson(fileInput && fileInput.files ? fileInput.files[0] : null);
+    if (toggle) {
+        toggle.checked = isAutoBackupEnabled();
+        toggle.onchange = () => {
+            if (!canWrite()) {
+                toggle.checked = isAutoBackupEnabled();
+                return;
+            }
+            setAutoBackupEnabled(!!toggle.checked);
+            updateBackupMetaUI();
+        };
+    }
+
+    if (btnRestore) {
+        btnRestore.onclick = async () => {
+            if (!canWrite()) return;
+            const backups = getBackups();
+            const last = backups[backups.length - 1];
+            if (!last || !last.data) return;
+            const ok = confirm('Restaurar o último backup? Isso vai substituir os leads atuais.');
+            if (!ok) return;
+
+            let parsed;
+            try {
+                parsed = JSON.parse(last.data);
+            } catch {
+                alert('Backup corrompido.');
+                return;
+            }
+            const res = normalizeImportedLeads(parsed);
+            if (!res.ok) {
+                alert('Backup inválido.');
+                return;
+            }
+            maybeCreateBackupFromPersisted({ force: true });
+            leads = res.leads;
+
+            if (backendOnline) {
+                try {
+                    await apiReplaceLeads(leads);
+                    leads = await apiGetLeads();
+                } catch (e) {
+                    alert('Restaurado localmente, mas falhou ao enviar para o servidor.');
+                }
+            }
+
+            cacheLeads(leads);
+            renderApp();
+        };
+    }
+
+    if (btnClearBackups) {
+        btnClearBackups.onclick = () => {
+            if (!canWrite()) return;
+            const ok = confirm('Apagar todos os backups?');
+            if (!ok) return;
+            localStorage.removeItem(CRM_BACKUPS_KEY);
+            updateBackupMetaUI();
+        };
+    }
+
+    if (btnClearData) {
+        btnClearData.onclick = async () => {
+            if (!canWrite()) return;
+            const ok = confirm('Limpar todos os leads deste navegador?');
+            if (!ok) return;
+            maybeCreateBackupFromPersisted({ force: true });
+            leads = [];
+
+            if (backendOnline) {
+                try {
+                    await apiReplaceLeads([]);
+                    leads = await apiGetLeads();
+                } catch (e) {
+                    alert('Limpou localmente, mas falhou ao limpar no servidor.');
+                }
+            }
+
+            cacheLeads(leads);
+            renderApp();
+        };
+    }
+
+    const writable = canWrite();
+    if (fileInput) fileInput.disabled = !writable;
+    if (btnImport) btnImport.disabled = !writable;
+    if (toggle) toggle.disabled = !writable;
+    if (btnClearData) btnClearData.disabled = !writable;
+
+    updateBackupMetaUI();
+}
+
+function updateUserInfo() {
+    const wrap = document.getElementById('user-info');
+    const label = document.getElementById('user-label');
+    const logoutBtn = document.getElementById('logout-btn');
+    if (!wrap || !label || !logoutBtn || !currentSession) return;
+
+    const roleLabel = currentSession.role === 'admin'
+        ? 'Admin'
+        : currentSession.role === 'leitura'
+            ? 'Leitura'
+            : 'Consultor';
+    const statusLabel = backendOnline ? 'Online' : 'Offline';
+    label.textContent = `${currentSession.user} • ${roleLabel} • ${statusLabel}`;
+    wrap.style.display = 'flex';
+
+    logoutBtn.onclick = async () => {
+        try {
+            if (backendOnline && currentSession && currentSession.token) await apiLogout();
+        } catch { }
+        clearSession();
+        window.location.replace('login.html');
+    };
+
+    const btnNew = document.getElementById('btn-new-lead');
+    if (btnNew) btnNew.disabled = !canWrite();
+
+    if (dataModalInitialized) updateBackupMetaUI();
 }
 
 // --- Tema (Claro/Escuro) ---
@@ -75,41 +481,39 @@ function updateThemeIcon(theme) {
     btn.innerHTML = theme === 'dark' ? '<i class="ph ph-sun"></i>' : '<i class="ph ph-moon"></i>';
 }
 
+function cacheLeads(nextLeads) {
+    localStorage.setItem(CRM_DATA_KEY, JSON.stringify(nextLeads));
+    updateBackupMetaUI();
+}
+
 // Início
-function init() {
-    if (!requireAuth()) return;
+async function init() {
+    currentSession = requireSession();
+    if (!currentSession) return;
     initTheme();
 
-    // Top bar: usuário + role + botão sair
-    const chip = document.getElementById('user-chip');
-    const whoUser = document.getElementById('who-user');
-    const whoRole = document.getElementById('who-role');
-    const btnLogout = document.getElementById('logout-btn');
-    if (chip && whoUser && whoRole) {
-        chip.style.display = 'flex';
-        whoUser.textContent = (session.user || '').toLowerCase();
-        whoRole.textContent = isAdmin() ? 'admin' : 'consultor';
-    }
-    if (btnLogout) btnLogout.style.display = 'inline-flex';
-
-    // Modal Novo Lead: admin pode escolher o dono
-    const ownerWrap = document.getElementById('owner-wrap');
-    const ownerSelect = document.getElementById('nl-owner');
-    if (ownerWrap && ownerSelect) {
-        if (isAdmin()) {
-            ownerWrap.style.display = 'block';
-            ownerSelect.innerHTML = '';
-            ['admin', ...CONSULTORES].forEach(u => {
-                const opt = document.createElement('option');
-                opt.value = u;
-                opt.textContent = u;
-                ownerSelect.appendChild(opt);
-            });
-        } else {
-            ownerWrap.style.display = 'none';
+    await detectBackend();
+    if (backendOnline) {
+        if (!currentSession.token) {
+            clearSession();
+            window.location.replace('login.html?reason=invalid');
+            return;
+        }
+        try {
+            const me = await apiMe();
+            currentSession = { ...currentSession, user: me.user, role: me.role, exp: me.exp };
+            localStorage.setItem('sov_session', JSON.stringify(currentSession));
+            leads = await apiGetLeads();
+            cacheLeads(leads);
+        } catch (e) {
+            clearSession();
+            window.location.replace('login.html?reason=invalid');
+            return;
         }
     }
 
+    updateUserInfo();
+    initDataModal();
     renderApp();
 }
 
@@ -137,36 +541,30 @@ function renderApp() {
 }
 
 function leadMatchesFilter(lead) {
-  if (!filterText) return true;
-
-  const hay = [
-    lead.name,
-    lead.origin,
-    lead.stage,
-    lead.nextStep,
-    lead.obs,
-    lead.lossReason,
-    lead.owner // 🔥 CONSULTOR
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
-
-  return hay.includes(filterText);
+    if (!filterText) return true;
+    const hay = [
+        lead.name,
+        lead.phone,
+        lead.origin,
+        lead.owner,
+        Array.isArray(lead.tags) ? lead.tags.join(' ') : lead.tags,
+        lead.stage,
+        lead.nextStep,
+        lead.obs,
+        lead.lossReason
+    ].filter(Boolean).join(' ').toLowerCase();
+    return hay.includes(filterText);
 }
-
 
 // --- KANBAN ---
 function renderKanban(container) {
     const board = document.createElement('div');
     board.className = 'kanban-board';
 
-    const viewLeads = visibleLeads();
-
     STAGES.forEach(stage => {
         const col = document.createElement('div');
         col.className = 'kanban-col';
-        const filtered = viewLeads.filter(l => l.stage === stage && leadMatchesFilter(l));
+        const filtered = leads.filter(l => l.stage === stage && leadMatchesFilter(l));
 
         col.innerHTML = `<div class="col-header">${stage} <span>${filtered.length}</span></div>`;
         const list = document.createElement('div');
@@ -174,14 +572,19 @@ function renderKanban(container) {
 
         filtered.forEach(lead => {
             const card = document.createElement('div');
-            card.className = `lead-card ${stage === 'Fechado' ? 'won' : stage === 'Perdido' ? 'lost' : ''}`;
-            card.onclick = () => openEditModal(lead.id);
+            card.className = `lead-card ${stage === 'Fechado' ? 'won' : stage === 'Perdido' ? 'lost' : ''} ${canWrite() ? '' : 'readonly'}`;
+            if (canWrite()) card.onclick = () => openEditModal(lead.id);
             card.innerHTML = `
                 <div class="tag">${lead.origin}</div>
                 <div class="name">${lead.name}</div>
+                ${lead.phone ? `<div class="phone">📱 ${lead.phone}</div>` : ''}
                 <div class="val">R$ ${Number(lead.value).toLocaleString()}</div>
                 <div class="next">👣 ${lead.nextStep || 'Sem passo definido'}</div>
-                ${isAdmin() ? `<div class="next" style="margin-top:8px;opacity:.75">👤 ${lead.owner || 'admin'}</div>` : ''}
+                ${(Array.isArray(lead.tags) && lead.tags.length)
+                    ? `<div class="chips">${lead.tags.slice(0, 6).map(t => `<span class="chip">${t}</span>`).join('')}</div>`
+                    : ''
+                }
+                ${lead.owner ? `<div class="consultor-badge">${lead.owner}</div>` : ''}
             `;
             list.appendChild(card);
         });
@@ -193,13 +596,12 @@ function renderKanban(container) {
 
 // --- DASHBOARD (cards + tabelas + gráfico com tipo selecionável) ---
 function renderDashboard(container) {
-    const viewLeads = visibleLeads();
-    const totalValue = viewLeads.reduce((acc, curr) => acc + Number(curr.value), 0);
-    const wonLeads = viewLeads.filter(l => l.stage === 'Fechado');
-    const lostLeads = viewLeads.filter(l => l.stage === 'Perdido');
+    const totalValue = leads.reduce((acc, curr) => acc + Number(curr.value), 0);
+    const wonLeads = leads.filter(l => l.stage === 'Fechado');
+    const lostLeads = leads.filter(l => l.stage === 'Perdido');
     const totalWon = wonLeads.reduce((acc, curr) => acc + Number(curr.value), 0);
-    const activeLeads = viewLeads.filter(l => l.stage !== 'Fechado' && l.stage !== 'Perdido');
-    const conversion = viewLeads.length > 0 ? ((wonLeads.length / viewLeads.length) * 100).toFixed(1) : '0.0';
+    const activeLeads = leads.filter(l => l.stage !== 'Fechado' && l.stage !== 'Perdido');
+    const conversion = leads.length > 0 ? ((wonLeads.length / leads.length) * 100).toFixed(1) : '0.0';
 
     container.innerHTML = `
         <div class="dash-grid">
@@ -279,12 +681,10 @@ function setChartType(type) {
 // --- Inicializar / Atualizar o Gráfico Interativo ---
 function initSalesChart(type = 'bar') {
     const ctx = document.getElementById('salesChart').getContext('2d');
-
-    const base = visibleLeads();
     
     // Preparar dados: Soma de valores por etapa
     const dataByStage = STAGES.map(stage => {
-        return base
+        return leads
             .filter(l => l.stage === stage)
             .reduce((acc, curr) => acc + Number(curr.value), 0);
     });
@@ -352,45 +752,64 @@ function initSalesChart(type = 'bar') {
 }
 
 // --- FUNÇÕES DE LEAD ---
+function handleApiFailure(err, msg) {
+    if (err && err.message === 'unauthorized') {
+        clearSession();
+        window.location.replace('login.html?reason=invalid');
+        return true;
+    }
+    alert(msg || 'Erro ao comunicar com o servidor.');
+    return false;
+}
+
 function toggleModal(id, show) {
+    if (!canWrite() && (id === 'modal-new' || id === 'modal-edit')) return;
     document.getElementById(id).style.display = show ? 'flex' : 'none';
 }
 
-function addNewLead() {
-    const name = document.getElementById('nl-name').value;
+async function addNewLead() {
+    if (!canWrite()) return;
+    const name = sanitizeString(document.getElementById('nl-name').value, 120);
     if (!name) return alert("Insira o nome do cliente.");
 
-    const ownerSel = document.getElementById('nl-owner');
-    const owner = isAdmin()
-        ? (ownerSel ? (ownerSel.value || 'admin') : 'admin')
-        : (session.user || 'admin').toLowerCase();
-
     const lead = {
-        id: Date.now(),
+        id: (backendOnline && window.crypto && typeof window.crypto.randomUUID === 'function') ? window.crypto.randomUUID() : Date.now(),
         name,
-        origin: document.getElementById('nl-origin').value || 'Geral',
-        value: document.getElementById('nl-value').value || 0,
-        nextStep: document.getElementById('nl-step').value || '',
+        phone: sanitizePhone(document.getElementById('nl-phone') ? document.getElementById('nl-phone').value : '', 30),
+        origin: sanitizeString(document.getElementById('nl-origin').value, 60) || 'Geral',
+        value: Number(document.getElementById('nl-value').value) || 0,
+        nextStep: sanitizeString(document.getElementById('nl-step').value, 160),
         stage: 'Novo lead',
         tasks: [],
         lossReason: '',
         obs: '',
-        owner
+        owner: currentSession ? currentSession.user : '',
+        tags: parseTags(document.getElementById('nl-tags') ? document.getElementById('nl-tags').value : '')
     };
 
-    leads.push(lead);
+    if (backendOnline) {
+        try {
+            const saved = await apiCreateLead(lead);
+            leads.push(saved);
+        } catch (e) {
+            if (handleApiFailure(e, 'Não foi possível criar o lead no servidor.')) return;
+            leads.push(lead);
+        }
+    } else {
+        leads.push(lead);
+    }
+
     save();
     toggleModal('modal-new', false);
     renderApp();
 }
 
 function openEditModal(id) {
+    if (!canWrite()) return;
     const lead = leads.find(l => l.id === id);
     if (!lead) return;
-    if (!canEditLead(lead)) {
-        alert('Você não tem permissão para editar este lead.');
-        return;
-    }
+    const leadId = JSON.stringify(lead.id);
+    const tasks = Array.isArray(lead.tasks) ? lead.tasks : [];
     const modal = document.getElementById('modal-edit');
     modal.innerHTML = `
         <div class="modal-card edit-card">
@@ -400,6 +819,10 @@ function openEditModal(id) {
             </div>
             <div class="edit-body">
                 <div class="edit-main">
+                    <div class="field" style="margin-bottom: 12px;">
+                        <label>Responsável</label>
+                        <div style="font-weight: 600;">${lead.owner || '—'}</div>
+                    </div>
                     <label>Etapa Atual</label>
                     <select id="ed-stage" onchange="checkLoss(this.value)">
                         ${STAGES.map(s => `<option value="${s}" ${lead.stage === s ? 'selected' : ''}>${s}</option>`).join('')}
@@ -416,26 +839,28 @@ function openEditModal(id) {
 
                     <label>Valor</label>
                     <input type="number" id="ed-value" value="${lead.value}">
+                    <label>Celular</label>
+                    <input type="tel" id="ed-phone" value="${lead.phone || ''}" placeholder="Ex: (11) 91234-5678">
                     <label>Próximo Passo</label>
                     <input type="text" id="ed-step" value="${lead.nextStep}">
+                    <label>Tags</label>
+                    <input type="text" id="ed-tags" value="${Array.isArray(lead.tags) ? lead.tags.join(', ') : ''}" placeholder="Ex: quente, whatsapp, indicação">
                     <label>Observações</label>
                     <textarea id="ed-obs">${lead.obs || ''}</textarea>
                     
-                    <button class="btn-confirm" onclick="saveEdit(${lead.id})">Salvar Alterações</button>
-                    <button class="btn-danger" onclick="deleteLead(${lead.id})">
-                        <i class="ph ph-trash"></i> Excluir Lead
-                    </button>
+                    <button class="btn-confirm" onclick='saveEdit(${leadId})'>Salvar Alterações</button>
+                    <button class="btn-danger" style="margin-top:10px" onclick='deleteLead(${leadId})'>Apagar Lead</button>
                 </div>
                 <div class="edit-tasks">
                     <h4><i class="ph ph-check-square"></i> Tarefas</h4>
                     <div class="task-add">
                         <input type="text" id="tk-new" placeholder="Nova tarefa...">
-                        <button onclick="addTask(${lead.id})">+</button>
+                        <button onclick='addTask(${leadId})'>+</button>
                     </div>
                     <div class="tk-list">
-                        ${lead.tasks.map((t, i) => `
+                        ${tasks.map((t, i) => `
                             <div class="tk-item ${t.done ? 'done' : ''}">
-                                <span onclick="toggleTask(${lead.id}, ${i})">${t.done ? '✅' : '⭕'} ${t.desc}</span>
+                                <span onclick='toggleTask(${leadId}, ${i})'>${t.done ? '✅' : '⭕'} ${t.desc}</span>
                             </div>
                         `).join('')}
                     </div>
@@ -450,30 +875,52 @@ function checkLoss(val) {
     document.getElementById('loss-area').style.display = val === 'Perdido' ? 'block' : 'none';
 }
 
-function saveEdit(id) {
+async function saveEdit(id) {
+    if (!canWrite()) return;
     const lead = leads.find(l => l.id === id);
+    if (!lead) return;
     lead.stage = document.getElementById('ed-stage').value;
-    lead.value = document.getElementById('ed-value').value;
-    lead.nextStep = document.getElementById('ed-step').value;
-    lead.obs = document.getElementById('ed-obs').value;
+    lead.value = Number(document.getElementById('ed-value').value) || 0;
+    lead.phone = sanitizePhone(document.getElementById('ed-phone') ? document.getElementById('ed-phone').value : '', 30);
+    lead.nextStep = sanitizeString(document.getElementById('ed-step').value, 160);
+    lead.tags = parseTags(document.getElementById('ed-tags') ? document.getElementById('ed-tags').value : '');
+    lead.obs = sanitizeString(document.getElementById('ed-obs').value, 2000);
     lead.lossReason = lead.stage === 'Perdido' ? document.getElementById('ed-loss').value : '';
+
+    if (backendOnline) {
+        try {
+            const saved = await apiUpdateLead(lead.id, lead);
+            const idx = leads.findIndex(l => l.id === id);
+            if (idx >= 0) leads[idx] = saved;
+        } catch (e) {
+            if (handleApiFailure(e, 'Não foi possível salvar no servidor. Salvando só localmente.')) return;
+        }
+    }
 
     save();
     toggleModal('modal-edit', false);
     renderApp();
 }
 
-// Excluir Lead
-function deleteLead(id) {
+async function deleteLead(id) {
+    if (!canWrite()) return;
     const lead = leads.find(l => l.id === id);
     if (!lead) return;
-    if (!canEditLead(lead)) {
-        alert('Você não tem permissão para excluir este lead.');
-        return;
-    }
 
-    const ok = confirm(`Excluir o lead "${lead.name}"?\n\nEssa ação não pode ser desfeita.`);
+    const ok = confirm(`Apagar o lead "${lead.name}"?\n\nEssa ação não pode ser desfeita.`);
     if (!ok) return;
+
+    // Destrutivo: cria backup do estado atual mesmo com backup automático desligado
+    maybeCreateBackupFromPersisted({ force: true });
+
+    if (backendOnline) {
+        try {
+            await apiDeleteLead(id);
+        } catch (e) {
+            handleApiFailure(e, 'Não foi possível apagar no servidor.');
+            return;
+        }
+    }
 
     leads = leads.filter(l => l.id !== id);
     save();
@@ -481,23 +928,53 @@ function deleteLead(id) {
     renderApp();
 }
 
-function addTask(id) {
-    const desc = document.getElementById('tk-new').value;
+async function addTask(id) {
+    if (!canWrite()) return;
+    const desc = sanitizeString(document.getElementById('tk-new').value, 160);
     if(!desc) return;
-    leads.find(l => l.id === id).tasks.push({ desc, done: false });
+    const lead = leads.find(l => l.id === id);
+    if (!lead) return;
+    if (!Array.isArray(lead.tasks)) lead.tasks = [];
+    lead.tasks.push({ desc, done: false });
+
+    if (backendOnline) {
+        try {
+            const saved = await apiUpdateLead(lead.id, lead);
+            const idx = leads.findIndex(l => l.id === id);
+            if (idx >= 0) leads[idx] = saved;
+        } catch (e) {
+            if (handleApiFailure(e, 'Não foi possível salvar tarefas no servidor.')) return;
+        }
+    }
+
     save();
     openEditModal(id);
 }
 
-function toggleTask(id, idx) {
+async function toggleTask(id, idx) {
+    if (!canWrite()) return;
     const lead = leads.find(l => l.id === id);
+    if (!lead || !Array.isArray(lead.tasks) || !lead.tasks[idx]) return;
     lead.tasks[idx].done = !lead.tasks[idx].done;
+
+    if (backendOnline) {
+        try {
+            const saved = await apiUpdateLead(lead.id, lead);
+            const leadIdx = leads.findIndex(l => l.id === id);
+            if (leadIdx >= 0) leads[leadIdx] = saved;
+        } catch (e) {
+            if (handleApiFailure(e, 'Não foi possível salvar tarefas no servidor.')) return;
+        }
+    }
+
     save();
     openEditModal(id);
 }
 
 function save() {
-    localStorage.setItem('sov_crm_data', JSON.stringify(leads));
+    maybeCreateBackupFromPersisted();
+    localStorage.setItem(CRM_DATA_KEY, JSON.stringify(leads));
+    updateBackupMetaUI();
 }
 
 init();
