@@ -88,6 +88,25 @@ function createFileStore() {
       const db = loadDb();
       return db.users.find((u) => u.user === username) || null;
     },
+    async listUsers() {
+      const db = loadDb();
+      return db.users.map((u) => ({ user: u.user, role: u.role, createdAt: u.createdAt }));
+    },
+    async createUser({ user, pass, role }) {
+      const db = loadDb();
+      const exists = db.users.some((u) => u.user === user);
+      if (exists) return null;
+
+      const next = {
+        user,
+        role,
+        passHash: bcrypt.hashSync(String(pass), 10),
+        createdAt: new Date().toISOString()
+      };
+      db.users.push(next);
+      saveDb(db);
+      return { user: next.user, role: next.role, createdAt: next.createdAt };
+    },
     async addAudit(entry) {
       const db = loadDb();
       addAuditToDb(db, entry);
@@ -149,4 +168,3 @@ function createFileStore() {
 module.exports = {
   createFileStore
 };
-

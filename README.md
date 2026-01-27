@@ -42,3 +42,7 @@ Você ainda pode abrir `login.html` direto e usar `localStorage`, mas:
 - `SOV_ALLOW_DEFAULT_SEED` (`1` para permitir usuários padrão em produção)
 - `SOV_BOOTSTRAP_ADMIN_USER` (default: `admin`)
 - `SOV_BOOTSTRAP_ADMIN_PASS` (senha do admin inicial; recomendado no Railway)
+
+## Criar consultores (produção)
+
+Depois de logar como admin, no modal **Dados (JSON)** aparece a seção **Usuários** (somente admin, online) para criar consultores/leitura.

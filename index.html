@@ -119,6 +119,22 @@
                         <button class="btn-confirm" id="btn-import-json">Importar JSON</button>
                     </div>
 
+                    <div class="data-card" id="users-card" style="display:none;">
+                        <h4>Usuários</h4>
+                        <p>Criar consultores (somente admin, online).</p>
+                        <label>Usuário</label>
+                        <input type="text" id="usr-name" placeholder="Ex: joao">
+                        <label>Senha</label>
+                        <input type="password" id="usr-pass" placeholder="Mínimo 6 caracteres">
+                        <label>Perfil</label>
+                        <select id="usr-role">
+                            <option value="consultor">Consultor</option>
+                            <option value="leitura">Leitura</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                        <button class="btn-confirm" id="btn-create-user">Criar usuário</button>
+                    </div>
+
                     <div class="data-card">
                         <h4>Backup automático</h4>
                         <p>Guarda snapshots locais ao salvar alterações.</p>

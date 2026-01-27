@@ -203,6 +203,28 @@ function createPgStore() {
       );
       return rows[0] || null;
     },
+    async listUsers() {
+      await init();
+      const { rows } = await pool.query(
+        `SELECT username AS user, role, created_at AS "createdAt"
+         FROM users
+         ORDER BY created_at ASC, username ASC`
+      );
+      return rows.map((r) => ({ user: r.user, role: r.role, createdAt: Number(r.createdAt) || 0 }));
+    },
+    async createUser({ user, pass, role }) {
+      await init();
+      const passHash = bcrypt.hashSync(String(pass), 10);
+      const createdAt = Date.now();
+      const { rowCount } = await pool.query(
+        `INSERT INTO users (username, role, pass_hash, created_at)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (username) DO NOTHING`,
+        [user, role, passHash, createdAt]
+      );
+      if (!rowCount) return null;
+      return { user, role, createdAt };
+    },
     async addAudit(entry) {
       await init();
       const id = crypto.randomUUID();
@@ -392,4 +414,3 @@ function createPgStore() {
 module.exports = {
   createPgStore
 };
-

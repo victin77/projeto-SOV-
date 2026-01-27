@@ -18,6 +18,11 @@ function wrapAsync(fn) {
   return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 }
 
+function requireAdmin(req, res, next) {
+  if (!req.auth || req.auth.role !== 'admin') return res.status(403).json({ error: 'forbidden' });
+  next();
+}
+
 app.get('/api/ping', (req, res) => {
   res.json({ ok: true, time: Date.now() });
 });
@@ -47,6 +52,27 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
 app.post('/api/auth/logout', authMiddleware, wrapAsync(async (req, res) => {
   await store.addAudit({ actor: req.auth.user, action: 'logout', entityType: 'auth' });
   res.json({ ok: true });
+}));
+
+app.get('/api/admin/users', authMiddleware, requireAdmin, wrapAsync(async (req, res) => {
+  const users = await store.listUsers();
+  res.json({ users });
+}));
+
+app.post('/api/admin/users', authMiddleware, requireAdmin, wrapAsync(async (req, res) => {
+  const user = (req.body && req.body.user ? String(req.body.user) : '').trim().toLowerCase();
+  const pass = req.body && typeof req.body.pass === 'string' ? req.body.pass : '';
+  const roleRaw = (req.body && req.body.role ? String(req.body.role) : 'consultor').trim().toLowerCase();
+  const role = ['admin', 'consultor', 'leitura'].includes(roleRaw) ? roleRaw : 'consultor';
+  if (!user || !pass) return res.status(400).json({ error: 'missing_credentials' });
+  if (user.length > 60) return res.status(400).json({ error: 'invalid_user' });
+  if (pass.length < 6) return res.status(400).json({ error: 'weak_password' });
+
+  const created = await store.createUser({ user, pass, role });
+  if (!created) return res.status(409).json({ error: 'user_exists' });
+
+  await store.addAudit({ actor: req.auth.user, action: 'user_create', entityType: 'user', entityId: user });
+  res.json({ user: created });
 }));
 
 function sanitizeLead(raw) {

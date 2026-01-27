@@ -84,6 +84,11 @@ async function apiReplaceLeads(nextLeads) {
     await apiRequest('/api/leads/replace', { method: 'POST', body: { leads: nextLeads } });
 }
 
+async function apiCreateUser(user, pass, role) {
+    const data = await apiRequest('/api/admin/users', { method: 'POST', body: { user, pass, role } });
+    return data.user;
+}
+
 function getSession() {
     const raw = localStorage.getItem('sov_session');
     if (!raw) return null;
@@ -333,6 +338,11 @@ function initDataModal() {
     const btnRestore = document.getElementById('btn-restore-backup');
     const btnClearBackups = document.getElementById('btn-clear-backups');
     const btnClearData = document.getElementById('btn-clear-data');
+    const usersCard = document.getElementById('users-card');
+    const usersCreateBtn = document.getElementById('btn-create-user');
+    const usersName = document.getElementById('usr-name');
+    const usersPass = document.getElementById('usr-pass');
+    const usersRole = document.getElementById('usr-role');
 
     if (btnExport) btnExport.onclick = exportDataJson;
     if (btnImport) btnImport.onclick = () => importDataJson(fileInput && fileInput.files ? fileInput.files[0] : null);
@@ -418,6 +428,31 @@ function initDataModal() {
         };
     }
 
+    if (usersCard) {
+        const shouldShow = backendOnline && currentSession && currentSession.role === 'admin';
+        usersCard.style.display = shouldShow ? 'block' : 'none';
+    }
+
+    if (usersCreateBtn) {
+        usersCreateBtn.onclick = async () => {
+            if (!backendOnline) return alert('Servidor offline.');
+            if (!currentSession || currentSession.role !== 'admin') return alert('Apenas admin pode criar usuários.');
+            const u = sanitizeString(usersName ? usersName.value : '', 60).toLowerCase();
+            const p = (usersPass && typeof usersPass.value === 'string') ? usersPass.value : '';
+            const r = usersRole ? String(usersRole.value || 'consultor') : 'consultor';
+            if (!u || !p) return alert('Preencha usuário e senha.');
+            if (p.length < 6) return alert('Senha muito curta (mínimo 6).');
+
+            try {
+                await apiCreateUser(u, p, r);
+                if (usersPass) usersPass.value = '';
+                alert(`Usuário criado: ${u} (${r})`);
+            } catch (e) {
+                if (handleApiFailure(e, 'Não foi possível criar o usuário.')) return;
+            }
+        };
+    }
+
     const writable = canWrite();
     if (fileInput) fileInput.disabled = !writable;
     if (btnImport) btnImport.disabled = !writable;
@@ -452,6 +487,9 @@ function updateUserInfo() {
 
     const btnNew = document.getElementById('btn-new-lead');
     if (btnNew) btnNew.disabled = !canWrite();
+
+    const usersCard = document.getElementById('users-card');
+    if (usersCard) usersCard.style.display = (backendOnline && currentSession.role === 'admin') ? 'block' : 'none';
 
     if (dataModalInitialized) updateBackupMetaUI();
 }
