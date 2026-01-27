@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="pt-pt">
+<head>
+    <meta charset="UTF-8">
+    <title>SOV | Sales CRM Profissional</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="logo">
+                <i class="ph-fill ph-rocket-launch"></i>
+                <span>SOV <strong>CRM</strong></span>
+            </div>
+            <nav>
+                <button onclick="switchView('kanban')" id="nav-kanban" class="nav-item active">
+                    <i class="ph ph-kanban"></i> Pipeline
+                </button>
+                <button onclick="switchView('dashboard')" id="nav-dash" class="nav-item">
+                    <i class="ph ph-chart-pie-slice"></i> Dashboard
+                </button>
+            </nav>
+            <div class="user-info" id="user-info" style="display:none">
+                <span id="user-label"></span>
+                <button class="logout-btn" id="logout-btn" title="Sair">
+                    <i class="ph ph-sign-out"></i>
+                </button>
+            </div>
+        </aside>
+
+        <main class="content">
+            <header class="header">
+                <div class="search-bar">
+                    <i class="ph ph-magnifying-glass"></i>
+                    <input type="text" id="global-search" placeholder="Procurar por nome, origem, celular, etapa ou tags..." oninput="handleFilter()">
+                </div>
+                <div class="header-actions">
+                    <button class="icon-btn" id="theme-toggle" title="Alternar tema" onclick="toggleTheme()">
+                        <i class="ph ph-moon"></i>
+                    </button>
+                    <button class="icon-btn" id="data-btn" title="Dados" onclick="toggleModal('modal-data', true)">
+                        <i class="ph ph-database"></i>
+                    </button>
+                    <button class="btn-primary" id="btn-new-lead" onclick="toggleModal('modal-new', true)">
+                        <i class="ph ph-plus-bold"></i> Novo Lead
+                    </button>
+                </div>
+            </header>
+
+            <div id="view-container"></div>
+        </main>
+    </div>
+
+    <div id="modal-new" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Criar Novo Lead</h3>
+                <button class="close-btn" onclick="toggleModal('modal-new', false)">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="field">
+                    <label>Nome do Cliente</label>
+                    <input type="text" id="nl-name" placeholder="Ex: João Silva">
+                </div>
+                <div class="field">
+                    <label>Celular</label>
+                    <input type="tel" id="nl-phone" placeholder="Ex: (11) 91234-5678">
+                </div>
+                <div class="field-group">
+                    <div class="field">
+                        <label>Origem</label>
+                        <input type="text" id="nl-origin" placeholder="Instagram, Google...">
+                    </div>
+                    <div class="field">
+                        <label>Valor (R$)</label>
+                        <input type="number" id="nl-value" placeholder="0.00">
+                    </div>
+                </div>
+                <div class="field">
+                    <label>Próximo Passo</label>
+                    <input type="text" id="nl-step" placeholder="Enviar proposta...">
+                </div>
+                <div class="field">
+                    <label>Tags</label>
+                    <input type="text" id="nl-tags" placeholder="Ex: quente, whatsapp, indicação">
+                </div>
+                <button class="btn-confirm" onclick="addNewLead()">Salvar Lead</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-edit" class="modal-overlay">
+        <div class="modal-card edit-card">
+            </div>
+    </div>
+
+    <div id="modal-data" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Dados (JSON)</h3>
+                <button class="close-btn" onclick="toggleModal('modal-data', false)">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="data-grid">
+                    <div class="data-card">
+                        <h4>Exportar</h4>
+                        <p>Baixa um arquivo JSON com seus leads.</p>
+                        <button class="btn-confirm" id="btn-export-json" onclick="exportDataJson()">Exportar JSON</button>
+                    </div>
+
+                    <div class="data-card">
+                        <h4>Importar</h4>
+                        <p>Carrega um JSON e substitui seus leads atuais.</p>
+                        <input type="file" id="import-file" accept=".json,application/json">
+                        <button class="btn-confirm" id="btn-import-json">Importar JSON</button>
+                    </div>
+
+                    <div class="data-card" id="users-card" style="display:none;">
+                        <h4>Usuários</h4>
+                        <p>Criar consultores (somente admin, online).</p>
+                        <label>Usuário</label>
+                        <input type="text" id="usr-name" placeholder="Ex: joao">
+                        <label>Senha</label>
+                        <input type="password" id="usr-pass" placeholder="Mínimo 6 caracteres">
+                        <label>Perfil</label>
+                        <select id="usr-role">
+                            <option value="consultor">Consultor</option>
+                            <option value="leitura">Leitura</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                        <button class="btn-confirm" id="btn-create-user">Criar usuário</button>
+                    </div>
+
+                    <div class="data-card">
+                        <h4>Backup automático</h4>
+                        <p>Guarda snapshots locais ao salvar alterações.</p>
+                        <label class="data-toggle">
+                            <input type="checkbox" id="auto-backup-toggle">
+                            <span>Ativar backup automático</span>
+                        </label>
+                        <div class="data-meta" id="backup-meta"></div>
+                        <div class="data-actions">
+                            <button class="btn-secondary" id="btn-restore-backup">Restaurar último backup</button>
+                            <button class="btn-secondary" id="btn-clear-backups">Apagar backups</button>
+                        </div>
+                    </div>
+
+                    <div class="data-card danger">
+                        <h4>Limpar dados</h4>
+                        <p>Remove todos os leads deste navegador.</p>
+                        <button class="btn-danger" id="btn-clear-data">Limpar leads</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html> 

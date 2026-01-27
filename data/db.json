@@ -1,0 +1,248 @@
+{
+  "version": 1,
+  "createdAt": "2026-01-26T20:37:59.156Z",
+  "users": [
+    {
+      "user": "admin",
+      "role": "admin",
+      "passHash": "$2a$10$7FPF9ey9rwe7rE3z.cWlSe1LllEnBQCBaH52a6gvi3aPByfskxzGG",
+      "createdAt": "2026-01-26T20:37:59.242Z"
+    },
+    {
+      "user": "grazielle",
+      "role": "consultor",
+      "passHash": "$2a$10$I0AEtEzp6mMqEkqrusBvmOD/kbBI.VmbVfRk.yqT.SAAVVvw25Y7q",
+      "createdAt": "2026-01-26T20:37:59.316Z"
+    },
+    {
+      "user": "pedro",
+      "role": "consultor",
+      "passHash": "$2a$10$f4z8WXmbykwte/nTWcVyDuzjI3TRtAR0bZyy2tmirqbgQaXct8xNy",
+      "createdAt": "2026-01-26T20:37:59.392Z"
+    },
+    {
+      "user": "poli",
+      "role": "consultor",
+      "passHash": "$2a$10$X0wnyIjK0rZIHo/K.0FDXeUVUqbYK9ZR5W/A0kOl9pkwGJpm3btGa",
+      "createdAt": "2026-01-26T20:37:59.464Z"
+    },
+    {
+      "user": "gustavo",
+      "role": "consultor",
+      "passHash": "$2a$10$8L5CsxlRcRZ9Hm2Uq9iiEOo5Ln5.We2.qMPtgOuZxNIiyqFpWUKX.",
+      "createdAt": "2026-01-26T20:37:59.537Z"
+    },
+    {
+      "user": "victor",
+      "role": "consultor",
+      "passHash": "$2a$10$DeNzGgLeFW4h4xnd4erC1.pkdINuv.H4oVpkta2bLSs3MS2G94cOm",
+      "createdAt": "2026-01-26T20:37:59.609Z"
+    },
+    {
+      "user": "marcelo",
+      "role": "consultor",
+      "passHash": "$2a$10$EOFoRec63Q4N..C62HJKWOT/3cj5LKkNqAhyhUFRGFPAlYkjB4Fs2",
+      "createdAt": "2026-01-26T20:37:59.680Z"
+    },
+    {
+      "user": "consultor1",
+      "role": "consultor",
+      "passHash": "$2a$10$bG3FJ81f4YILYuR8jRapjuootWdZdWnTWDs16OlKT45ko4wkwUese",
+      "createdAt": "2026-01-27T14:51:52.986Z"
+    }
+  ],
+  "leads": [
+    {
+      "id": "cba580e4-c374-4620-8929-fcdabd8bde2c",
+      "name": "Teste Celular",
+      "phone": "(11) 91234-5678",
+      "origin": "Teste",
+      "value": 100,
+      "nextStep": "Ligar",
+      "stage": "Novo lead",
+      "tasks": [],
+      "lossReason": "",
+      "obs": "",
+      "owner": "",
+      "tags": [
+        "whatsapp"
+      ],
+      "createdAt": 1769519283939,
+      "updatedAt": 1769519283939,
+      "deleted": false,
+      "lastModifiedBy": "admin"
+    },
+    {
+      "id": "af07831f-965c-4d56-9666-2ea75553a47d",
+      "name": "Lead PG Test",
+      "phone": "(11) 90000-0000",
+      "origin": "Railway",
+      "value": 50,
+      "nextStep": "Chamar no Whats",
+      "stage": "Novo lead",
+      "tasks": [],
+      "lossReason": "",
+      "obs": "",
+      "owner": "",
+      "tags": [
+        "whatsapp"
+      ],
+      "createdAt": 1769523342500,
+      "updatedAt": 1769523342500,
+      "deleted": false,
+      "lastModifiedBy": "admin"
+    }
+  ],
+  "audit": [
+    {
+      "id": "72f59c14-e374-45e4-97b7-78d7c7f76721",
+      "at": 1769459879758,
+      "actor": "admin",
+      "action": "login",
+      "entityType": "auth"
+    },
+    {
+      "id": "d88d4c72-aaa0-469f-b92b-76b323cbca54",
+      "at": 1769460081719,
+      "actor": "admin",
+      "action": "login",
+      "entityType": "auth"
+    },
+    {
+      "id": "d75b6c3f-f212-43df-b83b-7494484df913",
+      "at": 1769460135698,
+      "actor": "admin",
+      "action": "logout",
+      "entityType": "auth"
+    },
+    {
+      "id": "42d92167-5357-451c-9a08-dfa6107655a5",
+      "at": 1769464901785,
+      "actor": "admin",
+      "action": "login",
+      "entityType": "auth"
+    },
+    {
+      "id": "ca16a698-a4c1-404a-abbc-ad3391cfba17",
+      "at": 1769465001496,
+      "actor": "admin",
+      "action": "logout",
+      "entityType": "auth"
+    },
+    {
+      "id": "0f179fe9-3296-4213-9c97-1277005f6cc1",
+      "at": 1769518005346,
+      "actor": "admin",
+      "action": "login",
+      "entityType": "auth"
+    },
+    {
+      "id": "67f93346-ce5a-41bc-ae45-48d2a7f16805",
+      "at": 1769518031545,
+      "actor": "admin",
+      "action": "logout",
+      "entityType": "auth"
+    },
+    {
+      "id": "56b80a96-7018-46a6-b1e9-afc9883db1ab",
+      "at": 1769518593569,
+      "actor": "admin",
+      "action": "login",
+      "entityType": "auth"
+    },
+    {
+      "id": "6de061e4-fbbc-47ec-8f0a-f9dbb9b9e54c",
+      "at": 1769518838391,
+      "actor": "admin",
+      "action": "logout",
+      "entityType": "auth"
+    },
+    {
+      "id": "a219471e-d220-438d-9677-0d56fad78e54",
+      "at": 1769518854984,
+      "actor": "admin",
+      "action": "login",
+      "entityType": "auth"
+    },
+    {
+      "id": "cccc0f41-2562-4fe4-a768-ed5c446a6b14",
+      "at": 1769518859315,
+      "actor": "admin",
+      "action": "logout",
+      "entityType": "auth"
+    },
+    {
+      "id": "aac48543-ef06-4fab-a99f-5f58caf019b2",
+      "at": 1769518864204,
+      "actor": "admin",
+      "action": "login",
+      "entityType": "auth"
+    },
+    {
+      "id": "59e67ab1-1633-4675-87f6-acea8761a370",
+      "at": 1769519273441,
+      "actor": "admin",
+      "action": "login",
+      "entityType": "auth"
+    },
+    {
+      "id": "b6c6b400-9f42-4d39-91d9-4ed9bfd70f4f",
+      "at": 1769519283680,
+      "actor": "admin",
+      "action": "login",
+      "entityType": "auth"
+    },
+    {
+      "id": "3930c3d4-63d3-4e98-a1aa-842d52779258",
+      "at": 1769519283939,
+      "actor": "admin",
+      "action": "lead_create",
+      "entityType": "lead",
+      "entityId": "cba580e4-c374-4620-8929-fcdabd8bde2c"
+    },
+    {
+      "id": "ec67b112-c675-4e42-bda0-ea55d6c00666",
+      "at": 1769523331780,
+      "actor": "admin",
+      "action": "login",
+      "entityType": "auth"
+    },
+    {
+      "id": "000317d4-8391-4801-9b78-c039a886bd7a",
+      "at": 1769523342356,
+      "actor": "admin",
+      "action": "login",
+      "entityType": "auth"
+    },
+    {
+      "id": "9662019b-ad88-43aa-a76f-7d77bbea2fc3",
+      "at": 1769523342500,
+      "actor": "admin",
+      "action": "lead_create",
+      "entityType": "lead",
+      "entityId": "af07831f-965c-4d56-9666-2ea75553a47d"
+    },
+    {
+      "id": "6ca26e87-ea55-4d53-82ba-394a6cc5e755",
+      "at": 1769525512706,
+      "actor": "admin",
+      "action": "login",
+      "entityType": "auth"
+    },
+    {
+      "id": "b32a55af-d60c-424b-b28c-4611ddf447ca",
+      "at": 1769525512989,
+      "actor": "admin",
+      "action": "user_create",
+      "entityType": "user",
+      "entityId": "consultor1"
+    },
+    {
+      "id": "d2ed219f-3ce4-4b07-931a-4908a41d9707",
+      "at": 1769525519988,
+      "actor": "consultor1",
+      "action": "login",
+      "entityType": "auth"
+    }
+  ]
+}
