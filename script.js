@@ -429,8 +429,15 @@ function initDataModal() {
     }
 
     if (usersCard) {
-        const shouldShow = backendOnline && currentSession && currentSession.role === 'admin';
-        usersCard.style.display = shouldShow ? 'block' : 'none';
+        const isAdmin = currentSession && currentSession.role === 'admin';
+        usersCard.style.display = isAdmin ? 'block' : 'none';
+        const hint = document.getElementById('usr-hint');
+        if (hint) hint.textContent = isAdmin ? (backendOnline ? 'Online' : 'Servidor offline (precisa estar online para criar usuários).') : '';
+        const enabled = !!isAdmin && backendOnline && canWrite();
+        if (usersCreateBtn) usersCreateBtn.disabled = !enabled;
+        if (usersName) usersName.disabled = !enabled;
+        if (usersPass) usersPass.disabled = !enabled;
+        if (usersRole) usersRole.disabled = !enabled;
     }
 
     if (usersCreateBtn) {
@@ -489,7 +496,21 @@ function updateUserInfo() {
     if (btnNew) btnNew.disabled = !canWrite();
 
     const usersCard = document.getElementById('users-card');
-    if (usersCard) usersCard.style.display = (backendOnline && currentSession.role === 'admin') ? 'block' : 'none';
+    if (usersCard) {
+        const isAdmin = currentSession.role === 'admin';
+        usersCard.style.display = isAdmin ? 'block' : 'none';
+        const hint = document.getElementById('usr-hint');
+        if (hint) hint.textContent = isAdmin ? (backendOnline ? 'Online' : 'Servidor offline (precisa estar online para criar usuários).') : '';
+        const enabled = isAdmin && backendOnline && canWrite();
+        const usersCreateBtn = document.getElementById('btn-create-user');
+        const usersName = document.getElementById('usr-name');
+        const usersPass = document.getElementById('usr-pass');
+        const usersRole = document.getElementById('usr-role');
+        if (usersCreateBtn) usersCreateBtn.disabled = !enabled;
+        if (usersName) usersName.disabled = !enabled;
+        if (usersPass) usersPass.disabled = !enabled;
+        if (usersRole) usersRole.disabled = !enabled;
+    }
 
     if (dataModalInitialized) updateBackupMetaUI();
 }
