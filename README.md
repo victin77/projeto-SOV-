@@ -45,4 +45,6 @@ Você ainda pode abrir `login.html` direto e usar `localStorage`, mas:
 
 ## Criar consultores (produção)
 
-Depois de logar como admin, no modal **Dados (JSON)** aparece a seção **Usuários** (somente admin, online) para criar consultores/leitura.
+Depois de logar como admin, no modal **Dados (JSON)** aparece a seção **Usuários** (somente admin) para:
+- criar consultores/leitura/admin
+- remover usuários (ex.: quando alguém sai da equipe)

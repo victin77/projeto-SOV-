@@ -274,6 +274,28 @@ label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: 
 @media (max-width: 760px){
     .data-actions{ flex-direction: column; }
 }
+.usr-list{
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 220px;
+    overflow: auto;
+}
+.usr-row{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+}
+.usr-row .meta{ color: var(--muted); font-size: 12px; }
+.btn-small{ width: auto !important; padding: 8px 10px; font-size: 12px; border-radius: 10px; }
+.btn-small.btn-danger{ width: auto !important; }
+.btn-small.btn-secondary{ width: auto !important; }
 
 .edit-tasks { background: var(--surface-2); padding: 20px; border-radius: 16px; border: 1px solid var(--border); display: flex; flex-direction: column; }
 .task-add{ display:flex; gap:10px; align-items:center; }

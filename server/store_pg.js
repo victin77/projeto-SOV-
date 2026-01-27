@@ -225,6 +225,41 @@ function createPgStore() {
       if (!rowCount) return null;
       return { user, role, createdAt };
     },
+    async deleteUser(user) {
+      await init();
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const { rows } = await client.query(`SELECT role FROM users WHERE username = $1`, [user]);
+        if (!rows[0]) {
+          await client.query('ROLLBACK');
+          return { ok: false, error: 'not_found' };
+        }
+
+        const role = rows[0].role;
+        if (role === 'admin') {
+          const { rows: adminRows } = await client.query(
+            `SELECT COUNT(*)::int AS c FROM users WHERE role = 'admin'`
+          );
+          const adminCount = adminRows && adminRows[0] ? adminRows[0].c : 0;
+          if (adminCount <= 1) {
+            await client.query('ROLLBACK');
+            return { ok: false, error: 'last_admin' };
+          }
+        }
+
+        await client.query(`DELETE FROM users WHERE username = $1`, [user]);
+        await client.query('COMMIT');
+        return { ok: true };
+      } catch (e) {
+        try {
+          await client.query('ROLLBACK');
+        } catch {}
+        throw e;
+      } finally {
+        client.release();
+      }
+    },
     async addAudit(entry) {
       await init();
       const id = crypto.randomUUID();

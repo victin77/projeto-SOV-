@@ -89,6 +89,15 @@ async function apiCreateUser(user, pass, role) {
     return data.user;
 }
 
+async function apiListUsers() {
+    const data = await apiRequest('/api/admin/users');
+    return Array.isArray(data.users) ? data.users : [];
+}
+
+async function apiDeleteUser(user) {
+    await apiRequest(`/api/admin/users/${encodeURIComponent(String(user))}`, { method: 'DELETE' });
+}
+
 function getSession() {
     const raw = localStorage.getItem('sov_session');
     if (!raw) return null;
@@ -340,6 +349,7 @@ function initDataModal() {
     const btnClearData = document.getElementById('btn-clear-data');
     const usersCard = document.getElementById('users-card');
     const usersCreateBtn = document.getElementById('btn-create-user');
+    const usersRefreshBtn = document.getElementById('btn-refresh-users');
     const usersName = document.getElementById('usr-name');
     const usersPass = document.getElementById('usr-pass');
     const usersRole = document.getElementById('usr-role');
@@ -428,22 +438,13 @@ function initDataModal() {
         };
     }
 
-    if (usersCard) {
-        const isAdmin = currentSession && currentSession.role === 'admin';
-        usersCard.style.display = isAdmin ? 'block' : 'none';
-        const hint = document.getElementById('usr-hint');
-        if (hint) hint.textContent = isAdmin ? (backendOnline ? 'Online' : 'Servidor offline (precisa estar online para criar usuários).') : '';
-        const enabled = !!isAdmin && backendOnline && canWrite();
-        if (usersCreateBtn) usersCreateBtn.disabled = !enabled;
-        if (usersName) usersName.disabled = !enabled;
-        if (usersPass) usersPass.disabled = !enabled;
-        if (usersRole) usersRole.disabled = !enabled;
-    }
+    setUsersAdminUiState();
+    if (usersRefreshBtn) usersRefreshBtn.onclick = () => refreshUsersList();
 
     if (usersCreateBtn) {
         usersCreateBtn.onclick = async () => {
             if (!backendOnline) return alert('Servidor offline.');
-            if (!currentSession || currentSession.role !== 'admin') return alert('Apenas admin pode criar usuários.');
+            if (!isAdmin()) return alert('Apenas admin pode criar usuários.');
             const u = sanitizeString(usersName ? usersName.value : '', 60).toLowerCase();
             const p = (usersPass && typeof usersPass.value === 'string') ? usersPass.value : '';
             const r = usersRole ? String(usersRole.value || 'consultor') : 'consultor';
@@ -454,7 +455,9 @@ function initDataModal() {
                 await apiCreateUser(u, p, r);
                 if (usersPass) usersPass.value = '';
                 alert(`Usuário criado: ${u} (${r})`);
+                await refreshUsersList();
             } catch (e) {
+                if (e && e.code === 'user_exists') return alert('Esse usuário já existe.');
                 if (handleApiFailure(e, 'Não foi possível criar o usuário.')) return;
             }
         };
@@ -495,22 +498,7 @@ function updateUserInfo() {
     const btnNew = document.getElementById('btn-new-lead');
     if (btnNew) btnNew.disabled = !canWrite();
 
-    const usersCard = document.getElementById('users-card');
-    if (usersCard) {
-        const isAdmin = currentSession.role === 'admin';
-        usersCard.style.display = isAdmin ? 'block' : 'none';
-        const hint = document.getElementById('usr-hint');
-        if (hint) hint.textContent = isAdmin ? (backendOnline ? 'Online' : 'Servidor offline (precisa estar online para criar usuários).') : '';
-        const enabled = isAdmin && backendOnline && canWrite();
-        const usersCreateBtn = document.getElementById('btn-create-user');
-        const usersName = document.getElementById('usr-name');
-        const usersPass = document.getElementById('usr-pass');
-        const usersRole = document.getElementById('usr-role');
-        if (usersCreateBtn) usersCreateBtn.disabled = !enabled;
-        if (usersName) usersName.disabled = !enabled;
-        if (usersPass) usersPass.disabled = !enabled;
-        if (usersRole) usersRole.disabled = !enabled;
-    }
+    setUsersAdminUiState();
 
     if (dataModalInitialized) updateBackupMetaUI();
 }
@@ -821,9 +809,114 @@ function handleApiFailure(err, msg) {
     return false;
 }
 
+function isAdmin() {
+    return !!(currentSession && currentSession.role === 'admin');
+}
+
+function setUsersAdminUiState() {
+    const usersCard = document.getElementById('users-card');
+    if (!usersCard) return;
+
+    usersCard.style.display = isAdmin() ? 'block' : 'none';
+
+    const hint = document.getElementById('usr-hint');
+    if (hint) {
+        hint.textContent = backendOnline
+            ? 'Online'
+            : 'Servidor offline (precisa estar online para criar/remover usuários).';
+    }
+
+    const enabled = isAdmin() && backendOnline && canWrite();
+    const usersCreateBtn = document.getElementById('btn-create-user');
+    const usersRefreshBtn = document.getElementById('btn-refresh-users');
+    const usersName = document.getElementById('usr-name');
+    const usersPass = document.getElementById('usr-pass');
+    const usersRole = document.getElementById('usr-role');
+
+    if (usersCreateBtn) usersCreateBtn.disabled = !enabled;
+    if (usersRefreshBtn) usersRefreshBtn.disabled = !enabled;
+    if (usersName) usersName.disabled = !enabled;
+    if (usersPass) usersPass.disabled = !enabled;
+    if (usersRole) usersRole.disabled = !enabled;
+}
+
+function renderUsersList(users) {
+    const list = document.getElementById('usr-list');
+    if (!list) return;
+    list.replaceChildren();
+
+    if (!isAdmin()) return;
+    if (!backendOnline) {
+        const meta = document.createElement('div');
+        meta.className = 'data-meta';
+        meta.textContent = 'Servidor offline.';
+        list.appendChild(meta);
+        return;
+    }
+
+    if (!Array.isArray(users) || users.length === 0) {
+        const meta = document.createElement('div');
+        meta.className = 'data-meta';
+        meta.textContent = 'Nenhum usuário cadastrado.';
+        list.appendChild(meta);
+        return;
+    }
+
+    users.forEach((u) => {
+        const row = document.createElement('div');
+        row.className = 'usr-row';
+
+        const left = document.createElement('div');
+        const title = document.createElement('div');
+        title.textContent = u.user || '—';
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.textContent = (u.role || '—') + (u.user === currentSession.user ? ' • você' : '');
+        left.appendChild(title);
+        left.appendChild(meta);
+
+        const btn = document.createElement('button');
+        btn.className = 'btn-danger btn-small';
+        btn.textContent = 'Remover';
+        btn.disabled = !canWrite() || u.user === currentSession.user;
+        btn.onclick = async () => {
+            const who = u.user || '';
+            if (!who) return;
+            const ok = confirm(`Remover o usuário "${who}"?\n\nEssa ação desativa o login desse usuário.`);
+            if (!ok) return;
+            try {
+                await apiDeleteUser(who);
+                await refreshUsersList();
+            } catch (e) {
+                if (e && e.code === 'last_admin') return alert('Não é possível remover o último admin.');
+                if (handleApiFailure(e, 'Não foi possível remover o usuário.')) return;
+            }
+        };
+
+        row.appendChild(left);
+        row.appendChild(btn);
+        list.appendChild(row);
+    });
+}
+
+async function refreshUsersList() {
+    if (!isAdmin()) return;
+    setUsersAdminUiState();
+    const list = document.getElementById('usr-list');
+    if (!list) return;
+
+    try {
+        const users = await apiListUsers();
+        renderUsersList(users);
+    } catch (e) {
+        if (handleApiFailure(e, 'Não foi possível carregar usuários.')) return;
+    }
+}
+
 function toggleModal(id, show) {
     if (!canWrite() && (id === 'modal-new' || id === 'modal-edit')) return;
     document.getElementById(id).style.display = show ? 'flex' : 'none';
+    if (id === 'modal-data' && show) refreshUsersList();
 }
 
 async function addNewLead() {

@@ -107,6 +107,21 @@ function createFileStore() {
       saveDb(db);
       return { user: next.user, role: next.role, createdAt: next.createdAt };
     },
+    async deleteUser(user) {
+      const db = loadDb();
+      const idx = db.users.findIndex((u) => u.user === user);
+      if (idx === -1) return { ok: false, error: 'not_found' };
+
+      const target = db.users[idx];
+      if (target.role === 'admin') {
+        const adminCount = db.users.filter((u) => u.role === 'admin').length;
+        if (adminCount <= 1) return { ok: false, error: 'last_admin' };
+      }
+
+      db.users.splice(idx, 1);
+      saveDb(db);
+      return { ok: true };
+    },
     async addAudit(entry) {
       const db = loadDb();
       addAuditToDb(db, entry);

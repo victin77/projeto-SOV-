@@ -121,7 +121,7 @@
 
                     <div class="data-card" id="users-card" style="display:none;">
                         <h4>Usuários</h4>
-                        <p>Criar consultores (somente admin, online).</p>
+                        <p>Criar e remover usuÃ¡rios (somente admin).</p>
                         <div class="data-meta" id="usr-hint"></div>
                         <label>Usuário</label>
                         <input type="text" id="usr-name" placeholder="Ex: joao">
@@ -133,7 +133,11 @@
                             <option value="leitura">Leitura</option>
                             <option value="admin">Admin</option>
                         </select>
-                        <button class="btn-confirm" id="btn-create-user">Criar usuário</button>
+                        <div class="data-actions">
+                            <button class="btn-confirm" id="btn-create-user">Criar usuário</button>
+                            <button class="btn-secondary" id="btn-refresh-users" type="button">Atualizar lista</button>
+                        </div>
+                        <div class="usr-list" id="usr-list"></div>
                     </div>
 
                     <div class="data-card">

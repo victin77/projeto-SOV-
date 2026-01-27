@@ -75,6 +75,20 @@ app.post('/api/admin/users', authMiddleware, requireAdmin, wrapAsync(async (req,
   res.json({ user: created });
 }));
 
+app.delete('/api/admin/users/:user', authMiddleware, requireAdmin, wrapAsync(async (req, res) => {
+  const target = (req.params && req.params.user ? String(req.params.user) : '').trim().toLowerCase();
+  if (!target) return res.status(400).json({ error: 'invalid_user' });
+  if (target.length > 60) return res.status(400).json({ error: 'invalid_user' });
+  if (target === req.auth.user) return res.status(400).json({ error: 'cannot_delete_self' });
+
+  const result = await store.deleteUser(target);
+  if (!result || result.error === 'not_found') return res.status(404).json({ error: 'user_not_found' });
+  if (result.error === 'last_admin') return res.status(409).json({ error: 'last_admin' });
+
+  await store.addAudit({ actor: req.auth.user, action: 'user_delete', entityType: 'user', entityId: target });
+  res.json({ ok: true });
+}));
+
 function sanitizeLead(raw) {
   const safeStr = (v, max = 500) => {
     const s = (v ?? '').toString().trim();
