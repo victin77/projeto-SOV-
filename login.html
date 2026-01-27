@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SOV • Login</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg: #07070A;
+      --panel: rgba(255,255,255,.04);
+      --panel2: rgba(255,255,255,.06);
+      --stroke: rgba(255,255,255,.12);
+      --text: rgba(0, 0, 0, 0.92);
+      --muted: rgba(0, 0, 0, 0.62);
+      --shadow: 0 22px 60px rgba(0, 0, 0, 0.55);
+      --r: 18px;
+
+      --g1: #D3D3D3; /* roxo */
+      --g1: #3EBDFF; /* roxo */
+      --g2: #002B71; /* rosa */
+      --g2: #002B71; /* rosa */
+      --g3: #D3D3D3; /* laranja */
+    }
+
+    *{ box-sizing: border-box; }
+    html,body{ height:100%; }
+    body{
+      margin:0;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      color: var(--text);
+      /* Plano de fundo (coloque a imagem em: imagens/login-bg.jpg) */
+      background: url("imagens/login-bg.jpg") center/cover no-repeat fixed;
+      overflow:hidden;
+    }
+
+    /* grid principal */
+    .wrap{
+      height:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      position:relative;
+      z-index:1;
+    }
+
+    /* lado esquerdo (form) */
+    .left{
+      position:relative;
+      padding: 64px clamp(20px, 5vw, 84px);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      overflow:hidden;
+    }
+
+    .card{
+      position:relative;
+      width:min(520px, 100%);
+      padding: 34px 34px 28px;
+      border-radius: var(--r);
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border: 1px solid rgba(255,255,255,.10);
+      box-shadow: 0 3px 30px rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(10px);
+    }
+
+    .title{
+      font-size: clamp(34px, 4vw, 54px);
+      line-height: 1.05;
+      margin: 2px 0 22px;
+      letter-spacing: -0.03em;
+      font-weight: 800;
+    }
+    .title .dot{
+      display:inline-block;
+      width:10px;height:10px;border-radius:50%;
+      background: linear-gradient(90deg,var(--g1),var(--g2),var(--g3));
+      transform: translateY(-2px);
+      margin-left:8px;
+    }
+
+    .sub{
+      margin: 0 0 22px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .field{
+      margin: 14px 0 16px;
+    }
+    label{
+      display:block;
+      font-size: 12px;
+      color: rgba(0, 0, 0, 0.66);
+      margin: 0 0 8px;
+      letter-spacing: .02em;
+    }
+
+    /* input com borda gradiente tipo a imagem */
+    .inputShell{
+      position:relative;
+      border-radius: 14px;
+      padding: 1px;
+      background: linear-gradient(90deg, rgba(124,58,237,.8), rgba(236,72,153,.8), rgba(245,158,11,.75));
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    .inputShell::after{
+      content:"";
+      position:absolute;
+      inset:1px;
+      border-radius: 13px;
+      background: rgba(10,10,14,.85);
+      border: 1px solid rgba(255,255,255,.06);
+      z-index:0;
+    }
+    input{
+      position:relative;
+      z-index:1;
+      width:100%;
+      height: 48px;
+      padding: 0 14px;
+      border:0;
+      outline:none;
+      background: transparent;
+      color:  rgba(255, 255, 255, 0.92);
+      font-size: 14px;
+    }
+    input::placeholder{ color: rgba(255, 255, 255, 0.767); }
+
+    .row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 12px;
+      margin-top: 6px;
+      margin-bottom: 18px;
+    }
+
+    .link{
+      color: rgba(0, 0, 0, 0.78);
+      font-size: 13px;
+      text-decoration: underline;
+      text-decoration-color: rgba(0, 0, 0, 0.28);
+      text-underline-offset: 3px;
+      cursor:pointer;
+      user-select:none;
+    }
+    .link:hover{ color: #000000; }
+
+    .btn{
+      width: 100%;
+      height: 54px;
+      border:0;
+      border-radius: 14px;
+      color:#ffffff;
+      font-weight: 800;
+      font-size: 18px;
+      letter-spacing:.01em;
+      cursor:pointer;
+      background: linear-gradient(90deg, var(--g1), var(--g2), var(--g3));
+      box-shadow: 0 14px 36px rgba(124,58,237,.18), 0 14px 36px rgba(236,72,153,.14);
+      transition: transform .12s ease, filter .12s ease;
+    }
+    .btn:hover{ transform: translateY(-1px); filter: brightness(1.03); }
+    .btn:active{ transform: translateY(0px) scale(.995); }
+
+    .helper{
+      margin-top: 16px;
+      text-align:center;
+      font-size: 13px;
+      color: rgba(0, 0, 0, 0.62);
+    }
+    .helper a{
+      color: rgba(0, 0, 0, 0.85);
+      text-decoration: underline;
+      text-decoration-color: rgba(255,255,255,.28);
+      text-underline-offset: 3px;
+    }
+
+    .msg{
+      margin-top: 14px;
+      font-size: 13px;
+      color: rgba(0, 0, 0, 0.78);
+      display:none;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.10);
+    }
+    .msg.err{
+      display:block;
+      border-color: rgba(239,68,68,.35);
+      background: rgba(239,68,68,.10);
+      color: rgba(0, 0, 0, 0.92);
+    }
+    .msg.ok{
+      display:block;
+      border-color: rgba(34,197,94,.35);
+      background: rgba(34,197,94,.10);
+      color: rgba(0, 0, 0, 0.92);
+    }
+
+    /* responsivo */
+    @media (max-width: 980px){
+      body{ overflow:auto; }
+      .left{ padding-top: 40px; padding-bottom: 26px; }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="wrap">
+    <section class="left">
+      <div class="card">
+        <div class="title">Faça o seu Login<span class="dot"></span></div>
+
+        <form id="loginForm" autocomplete="on">
+          <div class="field">
+            <label for="user">Usuário</label>
+            <div class="inputShell">
+              <input id="user" name="user" placeholder="ex: gustavo, pedro, admin" required />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="pass">Senha</label>
+            <div class="inputShell">
+              <input id="pass" name="pass" type="password" placeholder="••••••••" required />
+            </div>
+          </div>
+
+          <button class="btn" type="submit">Entrar</button>
+
+          <div id="msg" class="msg" role="alert"></div>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // ======== LOGIN (front-end) ========
+    // Troque as senhas aqui.
+    // IMPORTANTE: Em front-end puro isso NÃO é segurança real (qualquer um pode ver no código).
+    const USERS = {
+      admin:    { pass: "admin123", role: "admin" },
+      grazielle:{ pass: "grazielle123", role: "consultor" },
+      pedro:    { pass: "pedro123", role: "consultor" },
+      poli:     { pass: "poli123", role: "consultor" },
+      gustavo:  { pass: "gustavo123", role: "consultor" },
+      victor:   { pass: "victor123", role: "consultor" },
+      marcelo:  { pass: "marcelo123", role: "consultor" }
+    };
+
+    const form = document.getElementById("loginForm");
+    const msg  = document.getElementById("msg");
+
+    const $ = (id) => document.getElementById(id);
+
+    const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 horas
+
+    async function backendLogin(user, pass){
+      try{
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user, pass })
+        });
+        const data = await res.json().catch(() => ({}));
+        if(!res.ok){
+          const code = data && data.error ? data.error : "login_failed";
+          return { ok: false, error: code };
+        }
+        return { ok: true, data };
+      }catch(e){
+        return { ok: false, error: "backend_offline" };
+      }
+    }
+
+    function setMsg(text, type){
+      msg.className = "msg " + (type || "");
+      msg.textContent = text;
+      msg.style.display = "block";
+    }
+
+    function clearMsg(){
+      msg.className = "msg";
+      msg.textContent = "";
+      msg.style.display = "none";
+    }
+
+    function normalizeUser(u){
+      return (u || "").trim().toLowerCase();
+    }
+
+    function getSession(){
+      const raw = localStorage.getItem("sov_session");
+      if(!raw) return null;
+      try{
+        const s = JSON.parse(raw);
+        if(!s || !s.user || !s.role) return null;
+        const exp = typeof s.exp === "number"
+          ? s.exp
+          : (typeof s.at === "number" ? s.at + SESSION_TTL_MS : 0);
+        return { ...s, exp };
+      }catch(e){
+        return null;
+      }
+    }
+
+    function isSessionExpired(session){
+      return !session || typeof session.exp !== "number" || Date.now() > session.exp;
+    }
+
+    function clearSession(){
+      localStorage.removeItem("sov_session");
+    }
+
+    // Se já estiver logado, manda pro index
+    (function autoRedirect(){
+      const s = getSession();
+      if(s && !isSessionExpired(s)){
+        window.location.href = "index.html";
+        return;
+      }
+      if(s && isSessionExpired(s)){
+        clearSession();
+      }
+    })();
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      clearMsg();
+
+      const user = normalizeUser($("user").value);
+      const pass = $("pass").value;
+
+      // tenta backend primeiro (quando rodando via servidor)
+      (async () => {
+        const back = await backendLogin(user, pass);
+        if(back.ok){
+          const now = Date.now();
+          const exp = typeof back.data.exp === "number" ? back.data.exp : (now + SESSION_TTL_MS);
+          const session = { user: back.data.user, role: back.data.role, token: back.data.token, at: now, exp };
+          localStorage.setItem("sov_session", JSON.stringify(session));
+          setMsg("Login realizado (servidor)! Indo para o SOV...", "ok");
+          setTimeout(() => window.location.href = "index.html", 450);
+          return;
+        }
+
+        // se backend estiver offline, cai pro modo local (antigo)
+        if(back.error !== "backend_offline"){
+          const map = {
+            missing_credentials: "Preencha usuário e senha.",
+            user_not_found: "Usuário não encontrado.",
+            wrong_password: "Senha incorreta.",
+            login_failed: "Não foi possível fazer login."
+          };
+          setMsg(map[back.error] || "Não foi possível fazer login.", "err");
+          return;
+        }
+
+        // ===== fallback offline =====
+        if(!USERS[user]){
+          setMsg("Usuário não encontrado. (modo offline)", "err");
+          return;
+        }
+        if(USERS[user].pass !== pass){
+          setMsg("Senha incorreta. (modo offline)", "err");
+          return;
+        }
+
+        const now = Date.now();
+        const session = { user, role: USERS[user].role, at: now, exp: now + SESSION_TTL_MS };
+        localStorage.setItem("sov_session", JSON.stringify(session));
+        setMsg("Login realizado (modo offline)! Indo para o SOV...", "ok");
+        setTimeout(() => window.location.href = "index.html", 450);
+      })();
+
+    });
+
+    const forgotBtn = $("forgotBtn");
+    if(forgotBtn){
+      forgotBtn.addEventListener("click", () => {
+        setMsg("Fale com o admin para resetar sua senha.", "err");
+      });
+    }
+
+    const showUsersBtn = $("showUsersBtn");
+    if(showUsersBtn){
+      showUsersBtn.addEventListener("click", () => {
+        setMsg("Usuários: admin, grazielle, pedro, poli, gustavo, victor, marcelo", "ok");
+      });
+    }
+
+    // helpBtn removido do layout (mantém código seguro caso volte no futuro)
+    const helpBtn = $("helpBtn");
+    if(helpBtn){
+      helpBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        setMsg("Chame o admin no WhatsApp/Teams para liberar seu acesso.", "ok");
+      });
+    }
+
+    (function showRedirectReason(){
+      const params = new URLSearchParams(window.location.search);
+      const reason = params.get("reason");
+      if(reason === "expired"){
+        setMsg("Sua sessão expirou. Faça login novamente.", "err");
+      }else if(reason === "invalid"){
+        setMsg("Sessão inválida. Faça login novamente.", "err");
+      }
+    })();
+
+    const yearEl = $("year");
+    if(yearEl) yearEl.textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
