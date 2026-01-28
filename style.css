@@ -315,23 +315,6 @@ label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: 
 .tk-list { flex: 1; overflow-y: auto; margin-top: 15px; }
 .tk-item { background: var(--surface); padding: 10px; border-radius: 12px; margin-bottom: 8px; cursor: pointer; border: 1px solid var(--border); }
 .tk-item.done { opacity: 0.5; text-decoration: line-through; }
-.tk-item-row{ display:flex; align-items:center; justify-content:space-between; gap: 10px; }
-.tk-item-row span{ flex: 1; }
-.tk-del{
-    width: 36px;
-    height: 36px;
-    flex: 0 0 auto;
-    border-radius: 10px;
-    border: 1px solid var(--border);
-    background: var(--surface-2);
-    color: var(--danger);
-    cursor: pointer;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-}
-.tk-del:hover{ box-shadow: var(--shadow-soft); filter: brightness(0.99); }
-.tk-del i{ font-size: 18px; }
 
 .chart-section {
     background: var(--surface);
@@ -383,18 +366,6 @@ label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: 
 }
 .chart-controls .hint{ color: var(--muted); font-size: 12px; }
 .chart-controls select{ max-width: 240px; margin: 0; }
-
-.dash-filters{
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.dash-filters label{
-    color: var(--muted);
-    font-size: 12px;
-    white-space: nowrap;
-}
 
 /* ===== TELA DE LOGIN ===== */
 .login-screen {

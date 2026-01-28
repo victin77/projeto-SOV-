@@ -113,26 +113,9 @@
                     </div>
 
                     <div class="data-card">
-                        <h4>Excel</h4>
-                        <p>Exporta/Importa um .xlsx com Leads e Tarefas.</p>
-                        <button class="btn-confirm" id="btn-export-xlsx" type="button">Exportar Excel</button>
-                        <div style="height:10px"></div>
-                        <input type="file" id="import-xlsx-file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
-                        <label class="data-toggle" style="margin-top:10px;">
-                            <input type="checkbox" id="import-xlsx-merge-toggle" checked>
-                            <span>Mesclar (nÃƒÂ£o apagar os atuais)</span>
-                        </label>
-                        <button class="btn-confirm" id="btn-import-xlsx" type="button">Importar Excel</button>
-                    </div>
-
-                    <div class="data-card">
                         <h4>Importar</h4>
-                        <p>Carrega um JSON e mescla com seus leads atuais (sem apagar).</p>
+                        <p>Carrega um JSON e substitui seus leads atuais.</p>
                         <input type="file" id="import-file" accept=".json,application/json">
-                        <label class="data-toggle" style="margin-top:10px;">
-                            <input type="checkbox" id="import-merge-toggle" checked>
-                            <span>Mesclar (nÃ£o apagar os atuais)</span>
-                        </label>
                         <button class="btn-confirm" id="btn-import-json">Importar JSON</button>
                     </div>
 
@@ -181,15 +164,6 @@
         </div>
     </div>
 
-    <script src="/vendor/xlsx.full.min.js"></script>
-    <script>
-        // Fallback (ex.: modo offline abrindo o HTML direto)
-        if (!window.XLSX) {
-            const s = document.createElement('script');
-            s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
-            document.head.appendChild(s);
-        }
-    </script>
     <script src="script.js"></script>
 </body>
 </html> 

@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "createdAt": "2026-01-28T17:53:41.475Z",
+  "users": [
+    {
+      "user": "admin",
+      "role": "admin",
+      "passHash": "$2a$10$Vyy6oJFog6UkiL2/WA872.woctXP3jBdbtdF/n88GpqtDSiKZ8c.u",
+      "createdAt": "2026-01-28T17:53:41.614Z"
+    },
+    {
+      "user": "grazielle",
+      "role": "consultor",
+      "passHash": "$2a$10$zl.EA6csKGs413Tqm6Tkn.Prk1t9lm.p9r5wgKIE8Je2tJ4ERKO4i",
+      "createdAt": "2026-01-28T17:53:41.772Z"
+    },
+    {
+      "user": "pedro",
+      "role": "consultor",
+      "passHash": "$2a$10$yrZR6gFd7dgslV6YBPbGJe6FOkOB0i3v6WTHV.cYQvUN4cucmV1VG",
+      "createdAt": "2026-01-28T17:53:41.882Z"
+    },
+    {
+      "user": "poli",
+      "role": "consultor",
+      "passHash": "$2a$10$JMPJHpdCcLUvWp0SoWj3u.G6VkXk9.8fviHlvgwwGgyxobC2rluJW",
+      "createdAt": "2026-01-28T17:53:41.996Z"
+    },
+    {
+      "user": "gustavo",
+      "role": "consultor",
+      "passHash": "$2a$10$dw.irVG0/7rAI2xOgu7SN.rfPvrFqwEPQs9LsKwSigLvH1FrOhk7m",
+      "createdAt": "2026-01-28T17:53:42.117Z"
+    },
+    {
+      "user": "victor",
+      "role": "consultor",
+      "passHash": "$2a$10$0C99captQmBS2nY4DkI/ceBM71S4FJTo8s/nVt31sWch2qHgtS1i6",
+      "createdAt": "2026-01-28T17:53:42.213Z"
+    },
+    {
+      "user": "marcelo",
+      "role": "consultor",
+      "passHash": "$2a$10$9KVuVHUh4rbqcLpNKLxOwOXTE1AfQKdqg5zAJomEe64vPO4agdPcG",
+      "createdAt": "2026-01-28T17:53:42.337Z"
+    }
+  ],
+  "leads": [
+    {
+      "id": "4f361d59-43a7-4fb9-a5ad-88f14e674e47",
+      "name": "v",
+      "phone": "3",
+      "origin": "v",
+      "value": 3,
+      "nextStep": "v",
+      "stage": "Novo lead",
+      "tasks": [],
+      "lossReason": "",
+      "obs": "",
+      "owner": "admin",
+      "tags": [
+        "v"
+      ],
+      "createdAt": 1769622846701,
+      "updatedAt": 1769622846701,
+      "deleted": false,
+      "lastModifiedBy": "admin"
+    }
+  ],
+  "audit": [
+    {
+      "id": "8b7c0611-19cc-40fc-a4f3-94b302abc8bd",
+      "at": 1769622836615,
+      "actor": "admin",
+      "action": "login",
+      "entityType": "auth"
+    },
+    {
+      "id": "b8670368-10f3-4fe0-9f0d-ff6716400aa0",
+      "at": 1769622846701,
+      "actor": "admin",
+      "action": "lead_create",
+      "entityType": "lead",
+      "entityId": "4f361d59-43a7-4fb9-a5ad-88f14e674e47"
+    }
+  ]
+}
