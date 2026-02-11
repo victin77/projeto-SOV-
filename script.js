@@ -1,9 +1,16 @@
-const STAGES = ['Novo lead', 'Qualificação', 'Simulação', 'Negociação', 'Fechado', 'Perdido'];
+﻿const STAGES = ['Leads do site', 'Novo lead', 'Qualificação', 'Simulação', 'Negociação', 'Fechado', 'Perdido'];
 let leads = JSON.parse(localStorage.getItem('sov_crm_data')) || [];
 let currentView = 'kanban';
 let filterText = '';
 let salesChart = null;
 let currentChartType = localStorage.getItem('sov_chart_type') || 'bar';
+let dashboardOwnerFilter = localStorage.getItem('sov_dash_owner') || 'all';
+const KANBAN_GENERAL_TAB = '__geral__';
+const KANBAN_INITIAL_VISIBLE = 4;
+const KANBAN_VISIBLE_STEP = 4;
+const KANBAN_STAGE_TABS = ['Leads do site', 'Novo lead', 'Qualificação', 'Simulação', 'Negociação', 'Fechado', 'Perdido'].filter((s) => STAGES.includes(s));
+let kanbanActiveTab = KANBAN_GENERAL_TAB;
+let kanbanVisibleByStage = {};
 
 // --- Sessão (front-end) ---
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 horas
@@ -236,13 +243,13 @@ function normalizeImportedLeads(payload) {
         const name = sanitizeString(raw.name, 120);
         if (!name) continue;
 
-        const stage = STAGES.includes(raw.stage) ? raw.stage : 'Novo lead';
+        const stage = mapImportedStage(raw.stage) || 'Novo lead';
 
         const tasksRaw = Array.isArray(raw.tasks) ? raw.tasks : [];
         const tasks = tasksRaw
             .filter(t => t && typeof t === 'object')
             .slice(0, 200)
-            .map(t => ({ desc: sanitizeString(t.desc, 160), done: !!t.done }))
+            .map(t => ({ desc: sanitizeString(t.desc, 160), done: !!t.done, createdAt: parseDateValue(t.createdAt) }))
             .filter(t => t.desc);
 
         const tagsRaw = Array.isArray(raw.tags)
@@ -253,15 +260,15 @@ function normalizeImportedLeads(payload) {
         )).slice(0, 20);
 
         const now = Date.now();
-        const createdAt = coerceEpochMs(raw.createdAt) ?? now;
-        const updatedAt = coerceEpochMs(raw.updatedAt) ?? createdAt;
+        const createdAt = parseDateValue(raw.createdAt) ?? now;
+        const updatedAt = parseDateValue(raw.updatedAt) ?? createdAt;
 
-        normalized.push({
+        const normalizedLead = {
             id,
             name,
             phone: sanitizePhone(raw.phone, 30),
             origin: sanitizeString(raw.origin, 60) || 'Geral',
-            value: Number(raw.value) || 0,
+            value: parseCurrencyValue(raw.value),
             nextStep: sanitizeString(raw.nextStep, 160),
             stage,
             tasks,
@@ -271,7 +278,13 @@ function normalizeImportedLeads(payload) {
             tags,
             createdAt,
             updatedAt
-        });
+        };
+
+        if (raw.__importMeta && typeof raw.__importMeta === 'object') {
+            normalizedLead.__importMeta = raw.__importMeta;
+        }
+
+        normalized.push(normalizedLead);
     }
 
     return { ok: true, leads: normalized };
@@ -301,6 +314,563 @@ function exportDataJson() {
     downloadJson(`sov-crm-export-${stamp}.json`, payload);
 }
 
+function ensureXlsxLoaded() {
+    // Provided by /vendor/xlsx.full.min.js
+    if (typeof window === 'undefined' || !window.XLSX) {
+        alert('Excel indisponível: a biblioteca não carregou. Recarregue a página e tente novamente.');
+        return false;
+    }
+    return true;
+}
+
+function toIsoOrEmpty(value) {
+    const ms = coerceEpochMs(value);
+    return ms ? new Date(ms).toISOString() : '';
+}
+
+function normalizeComparableText(value) {
+    return String(value ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
+
+function normalizeHeaderKey(key) {
+    return normalizeComparableText(key);
+}
+
+function pickRowValue(row, keys) {
+    if (!row || typeof row !== 'object') return '';
+    const direct = (k) => (row && Object.prototype.hasOwnProperty.call(row, k) ? row[k] : undefined);
+    for (const k of keys) {
+        const v = direct(k);
+        if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+    }
+    const normalized = {};
+    for (const [k, v] of Object.entries(row)) normalized[normalizeHeaderKey(k)] = v;
+    for (const k of keys) {
+        const v = normalized[normalizeHeaderKey(k)];
+        if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+    }
+    return '';
+}
+
+function parseCurrencyValue(value) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    const raw = String(value ?? '').trim();
+    if (!raw) return 0;
+
+    let cleaned = raw
+        .replace(/\s+/g, '')
+        .replace(/r\$/ig, '')
+        .replace(/[^\d,.\-]/g, '');
+    if (!cleaned) return 0;
+
+    const commaCount = (cleaned.match(/,/g) || []).length;
+    const dotCount = (cleaned.match(/\./g) || []).length;
+    if (commaCount > 0 && dotCount > 0) {
+        cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+    } else if (commaCount > 0) {
+        cleaned = cleaned.replace(',', '.');
+    }
+
+    const parsed = Number(cleaned);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function excelSerialToEpochMs(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+    if (value > 100000000000) return value;
+    if (value > 1000000000 && value < 9999999999) return value * 1000;
+    if (value >= 20000 && value <= 90000) {
+        const msPerDay = 24 * 60 * 60 * 1000;
+        const excelEpoch = Date.UTC(1899, 11, 30);
+        return Math.round(excelEpoch + (value * msPerDay));
+    }
+    return null;
+}
+
+function parseDateValue(value) {
+    if (value === null || value === undefined || value === '') return null;
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        const fromExcel = excelSerialToEpochMs(value);
+        if (fromExcel) return fromExcel;
+        return coerceEpochMs(value);
+    }
+
+    const str = String(value).trim();
+    if (!str) return null;
+
+    const asNum = Number(str);
+    if (Number.isFinite(asNum)) {
+        const fromExcel = excelSerialToEpochMs(asNum);
+        if (fromExcel) return fromExcel;
+    }
+
+    const ptBr = str.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (ptBr) {
+        const day = Number(ptBr[1]);
+        const month = Number(ptBr[2]);
+        const rawYear = Number(ptBr[3]);
+        const year = rawYear < 100 ? (2000 + rawYear) : rawYear;
+        const hour = Number(ptBr[4] || 0);
+        const minute = Number(ptBr[5] || 0);
+        const second = Number(ptBr[6] || 0);
+        const dt = new Date(year, month - 1, day, hour, minute, second);
+        const ms = dt.getTime();
+        if (Number.isFinite(ms)) return ms;
+    }
+
+    return coerceEpochMs(str);
+}
+
+function formatDateForField(value) {
+    const ms = parseDateValue(value);
+    if (!ms) return sanitizeString(value, 160);
+    return new Date(ms).toLocaleString('pt-BR');
+}
+
+function statusIndicatesLost(value) {
+    const s = normalizeComparableText(value);
+    if (!s) return false;
+    return (
+        s.includes('nao quer') ||
+        s.includes('sem interesse') ||
+        s.includes('desinteressado') ||
+        s.includes('desinteressada') ||
+        s.includes('desinteresse')
+    );
+}
+
+function mapImportedStage(value) {
+    const raw = sanitizeString(value, 80);
+    if (!raw) return '';
+    if (STAGES.includes(raw)) return raw;
+
+    const s = normalizeComparableText(raw);
+    if (!s) return '';
+    if (statusIndicatesLost(s) || s.includes('perdido')) return 'Perdido';
+    if (s.includes('fechado') || s.includes('ganho') || s.includes('venda')) return 'Fechado';
+    if (s.includes('negoci')) return 'Negociação';
+    if (s.includes('simula')) return 'Simulação';
+    if (s.includes('qualifica')) return 'Qualificação';
+    if (s.includes('site')) return 'Leads do site';
+    if (s.includes('novo')) return 'Novo lead';
+    return '';
+}
+
+function parseBoolish(value) {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    const s = String(value ?? '').trim().toLowerCase();
+    if (!s) return false;
+    return ['1', 'true', 't', 'yes', 'y', 'sim', 's', 'x', 'ok'].includes(s);
+}
+
+function exportDataXlsx() {
+    if (!ensureXlsxLoaded()) return;
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    const filename = `sov-crm-export-${stamp}.xlsx`;
+
+    const leadsRows = (Array.isArray(leads) ? leads : []).map((l) => ({
+        id: l.id ?? '',
+        name: l.name ?? '',
+        phone: l.phone ?? '',
+        origin: l.origin ?? '',
+        stage: l.stage ?? '',
+        value: Number(l.value) || 0,
+        nextStep: l.nextStep ?? '',
+        tags: Array.isArray(l.tags) ? l.tags.join(', ') : (l.tags ?? ''),
+        obs: l.obs ?? '',
+        lossReason: l.lossReason ?? '',
+        owner: l.owner ?? '',
+        createdAt: toIsoOrEmpty(l.createdAt),
+        updatedAt: toIsoOrEmpty(l.updatedAt)
+    }));
+
+    const tasksRows = [];
+    for (const l of (Array.isArray(leads) ? leads : [])) {
+        const arr = Array.isArray(l.tasks) ? l.tasks : [];
+        for (const t of arr) {
+            tasksRows.push({
+                leadId: l.id ?? '',
+                leadName: l.name ?? '',
+                desc: t && t.desc ? t.desc : '',
+                done: !!(t && t.done),
+                createdAt: toIsoOrEmpty(t && t.createdAt)
+            });
+        }
+    }
+
+    const wb = window.XLSX.utils.book_new();
+    const wsLeads = window.XLSX.utils.json_to_sheet(leadsRows);
+    window.XLSX.utils.book_append_sheet(wb, wsLeads, 'Leads');
+
+    const wsTasks = window.XLSX.utils.json_to_sheet(tasksRows);
+    window.XLSX.utils.book_append_sheet(wb, wsTasks, 'Tarefas');
+
+    window.XLSX.writeFile(wb, filename);
+}
+
+async function importDataXlsx(file) {
+    if (!canWrite()) return;
+    if (!ensureXlsxLoaded()) return;
+    if (!file) {
+        alert('Selecione um arquivo Excel (.xlsx).');
+        return;
+    }
+
+    const buf = await file.arrayBuffer();
+    let wb;
+    try {
+        wb = window.XLSX.read(buf, { type: 'array' });
+    } catch {
+        alert('Arquivo invalido: nao foi possivel ler o Excel.');
+        return;
+    }
+
+    const sheetNames = Array.isArray(wb.SheetNames) ? wb.SheetNames : [];
+    const leadsSheet =
+        wb.Sheets?.Leads ||
+        wb.Sheets?.LEADS ||
+        wb.Sheets?.leads ||
+        wb.Sheets?.Lead ||
+        (sheetNames[0] ? wb.Sheets[sheetNames[0]] : null);
+
+    const tasksSheet =
+        wb.Sheets?.Tarefas ||
+        wb.Sheets?.tarefas ||
+        wb.Sheets?.Tasks ||
+        wb.Sheets?.tasks ||
+        null;
+
+    if (!leadsSheet) {
+        alert('Planilha sem aba de Leads.');
+        return;
+    }
+
+    const leadsRows = window.XLSX.utils.sheet_to_json(leadsSheet, { defval: '' });
+    const tasksRows = tasksSheet ? window.XLSX.utils.sheet_to_json(tasksSheet, { defval: '' }) : [];
+
+    const tasksByLeadId = new Map();
+    for (const row of (Array.isArray(tasksRows) ? tasksRows : [])) {
+        const leadId = pickRowValue(row, ['leadId', 'lead_id', 'id', 'lead']);
+        const desc = pickRowValue(row, ['desc', 'descricao', 'descricao', 'tarefa', 'task']);
+        const done = parseBoolish(pickRowValue(row, ['done', 'feito', 'concluida', 'concluida', 'ok']));
+        if (!leadId || !desc) continue;
+        const key = String(leadId).trim();
+        if (!tasksByLeadId.has(key)) tasksByLeadId.set(key, []);
+        const createdAt = pickRowValue(row, ['createdAt', 'created_at', 'data', 'date', 'criadoem', 'criado em']);
+        tasksByLeadId.get(key).push({ desc: String(desc), done, createdAt });
+    }
+
+    const rawLeads = [];
+    for (const row of (Array.isArray(leadsRows) ? leadsRows : [])) {
+        const id = pickRowValue(row, ['id', 'leadId', 'lead_id']);
+        const name = pickRowValue(row, ['name', 'nome', 'nome do cliente', 'cliente']);
+        const phone = pickRowValue(row, ['phone', 'telefone', 'celular', 'numero', 'numero de contato', 'contato', 'whatsapp', 'zap']);
+        const owner = pickRowValue(row, ['owner', 'responsavel', 'consultor', 'nome do consultor']);
+        const origin = pickRowValue(row, ['origin', 'origem', 'lead', 'leads']);
+        const stageRaw = pickRowValue(row, ['stage', 'etapa']);
+        const statusRaw = pickRowValue(row, ['status', 'status do cliente', 'status cliente']);
+        const valueRaw = pickRowValue(row, ['value', 'valor', 'valor do consorcio']);
+        const nextStepRaw = pickRowValue(row, ['nextStep', 'next_step', 'proximo passo', 'passo seguinte']);
+        const returnDateRaw = pickRowValue(row, ['data de retorno', 'retorno', 'data retorno']);
+        const scheduleRaw = pickRowValue(row, ['agendamento']);
+        const tags = pickRowValue(row, ['tags', 'tag', 'consorcio de interesse', 'consorcio de interrese', 'interesse']);
+        const obs = pickRowValue(row, ['obs', 'observacoes', 'nota', 'notas']);
+        const email = pickRowValue(row, ['email', 'e-mail', 'gmail']);
+        const lossReason = pickRowValue(row, ['lossReason', 'loss_reason', 'motivo perda', 'motivo de perda']);
+        const createdAt = pickRowValue(row, ['createdAt', 'created_at', 'criadoem', 'criado em', 'carimbo de data/hora', 'carimbo de data hora', 'data do atendimento', 'data atendimento']);
+        const updatedAt = pickRowValue(row, ['updatedAt', 'updated_at', 'atualizadoem', 'atualizado em']);
+
+        const nextStepDate = returnDateRaw || scheduleRaw;
+        const nextStep = sanitizeString(nextStepRaw || (nextStepDate ? formatDateForField(nextStepDate) : ''), 160);
+
+        let stage = mapImportedStage(stageRaw) || mapImportedStage(statusRaw);
+        if (!stage && statusIndicatesLost(statusRaw)) stage = 'Perdido';
+
+        const obsParts = [];
+        if (obs) obsParts.push(String(obs));
+        if (email) obsParts.push(`Email: ${email}`);
+        if (returnDateRaw) obsParts.push(`Data de Retorno: ${formatDateForField(returnDateRaw)}`);
+        if (scheduleRaw) obsParts.push(`Agendamento: ${formatDateForField(scheduleRaw)}`);
+        const obsWithExtras = obsParts.join('\n').trim();
+
+        const provided = {};
+        if (id !== '' && id !== null && id !== undefined) provided.id = true;
+        if (name !== '' && name !== null && name !== undefined) provided.name = true;
+        if (phone !== '' && phone !== null && phone !== undefined) provided.phone = true;
+        if (owner !== '' && owner !== null && owner !== undefined) provided.owner = true;
+        if (origin !== '' && origin !== null && origin !== undefined) provided.origin = true;
+        if (stageRaw || statusRaw) provided.stage = true;
+        if (valueRaw !== '' && valueRaw !== null && valueRaw !== undefined) provided.value = true;
+        if (nextStepRaw || nextStepDate) provided.nextStep = true;
+        if (tags !== '' && tags !== null && tags !== undefined) provided.tags = true;
+        if (obsWithExtras) provided.obs = true;
+        if (lossReason !== '' && lossReason !== null && lossReason !== undefined) provided.lossReason = true;
+        if (createdAt !== '' && createdAt !== null && createdAt !== undefined) provided.createdAt = true;
+        if (updatedAt !== '' && updatedAt !== null && updatedAt !== undefined) provided.updatedAt = true;
+
+        const raw = {
+            id: id !== '' ? id : undefined,
+            name,
+            phone,
+            origin,
+            stage,
+            value: valueRaw,
+            nextStep,
+            tags,
+            obs: obsWithExtras,
+            lossReason,
+            owner,
+            createdAt,
+            updatedAt,
+            tasks: [],
+            __importMeta: { provided }
+        };
+
+        const key = raw.id !== undefined && raw.id !== null ? String(raw.id).trim() : '';
+        if (key && tasksByLeadId.has(key)) {
+            raw.tasks = tasksByLeadId.get(key);
+            raw.__importMeta.provided.tasks = true;
+        }
+        rawLeads.push(raw);
+    }
+
+    const res = normalizeImportedLeads(rawLeads);
+    if (!res.ok) {
+        alert(res.error);
+        return;
+    }
+    if (!isAdmin() && currentSession && currentSession.user) {
+        const me = sanitizeString(currentSession.user, 60).toLowerCase();
+        res.leads.forEach((l) => { l.owner = me; });
+    }
+
+    const mergeMode = document.getElementById('import-xlsx-merge-toggle')?.checked ?? true;
+
+    let existing = leads;
+    if (backendOnline) {
+        try {
+            existing = await apiGetLeads();
+        } catch {
+            existing = leads;
+        }
+    }
+
+    let nextLeads = res.leads;
+    let prompt = `Importar ${res.leads.length} lead(s) do Excel?`;
+
+    if (mergeMode) {
+        const preview = mergeLeadsAdditive(existing, res.leads);
+        nextLeads = preview.merged;
+        prompt += `\n\nModo: MESCLAR (não apaga).`;
+        prompt += `\nNovos: ${preview.added} | Atualizados: ${preview.updated} | Total após: ${nextLeads.length}`;
+    } else {
+        prompt += `\n\nModo: SUBSTITUIR (apaga os atuais).`;
+        prompt += `\nLeads atuais: ${Array.isArray(existing) ? existing.length : 0} | Total após: ${nextLeads.length}`;
+    }
+
+    const ok = confirm(prompt);
+    if (!ok) return;
+
+    maybeCreateBackupFromPersisted({ force: true });
+    leads = stripImportMetaFromLeads(nextLeads);
+
+    if (backendOnline) {
+        try {
+            await apiReplaceLeads(leads);
+            leads = await apiGetLeads();
+        } catch (e) {
+            alert('Importado localmente, mas falhou ao enviar para o servidor.');
+        }
+    }
+
+    cacheLeads(leads);
+    renderApp();
+    alert('Importação concluída.');
+}
+function stripImportMetaFromLead(lead) {
+    if (!lead || typeof lead !== 'object') return lead;
+    const { __importMeta, ...rest } = lead;
+    return rest;
+}
+
+function stripImportMetaFromLeads(list) {
+    return (Array.isArray(list) ? list : [])
+        .filter((l) => l && typeof l === 'object')
+        .map((l) => stripImportMetaFromLead(l));
+}
+
+function normalizePhoneDigits(value) {
+    return String(value ?? '').replace(/\D/g, '');
+}
+
+function phonesAreSimilar(a, b) {
+    const pa = normalizePhoneDigits(a);
+    const pb = normalizePhoneDigits(b);
+    if (!pa || !pb) return false;
+    if (pa === pb) return true;
+    if (Math.min(pa.length, pb.length) < 8) return false;
+    return pa.endsWith(pb) || pb.endsWith(pa);
+}
+
+function hasProvidedImportField(lead, field) {
+    const provided = lead && lead.__importMeta && typeof lead.__importMeta.provided === 'object'
+        ? lead.__importMeta.provided
+        : null;
+    return !!(provided && provided[field]);
+}
+
+function hasImportMetadata(lead) {
+    return !!(lead && lead.__importMeta && typeof lead.__importMeta.provided === 'object');
+}
+
+function normalizedName(value) {
+    return normalizeComparableText(value).replace(/\s+/g, ' ').trim();
+}
+
+function normalizedOwnerOrOrigin(value) {
+    return normalizeComparableText(value).replace(/\s+/g, ' ').trim();
+}
+
+function matchSupportScore(baseLead, incomingLead) {
+    const baseOwner = normalizedOwnerOrOrigin(baseLead && baseLead.owner ? baseLead.owner : '');
+    const incomingOwner = normalizedOwnerOrOrigin(incomingLead && incomingLead.owner ? incomingLead.owner : '');
+    const baseOrigin = normalizedOwnerOrOrigin(baseLead && baseLead.origin ? baseLead.origin : '');
+    const incomingOrigin = normalizedOwnerOrOrigin(incomingLead && incomingLead.origin ? incomingLead.origin : '');
+
+    let score = 0;
+    if (baseOwner && incomingOwner && baseOwner === incomingOwner) score += 2;
+    if (baseOrigin && incomingOrigin && baseOrigin === incomingOrigin) score += 1;
+    return score;
+}
+
+function findBestPhoneMatchIndex(list, incomingLead) {
+    const incomingPhone = normalizePhoneDigits(incomingLead && incomingLead.phone ? incomingLead.phone : '');
+    if (!incomingPhone) return -1;
+
+    let bestIdx = -1;
+    let bestScore = -1;
+    for (let i = 0; i < list.length; i++) {
+        const current = list[i];
+        if (!phonesAreSimilar(current && current.phone ? current.phone : '', incomingPhone)) continue;
+
+        const currentPhone = normalizePhoneDigits(current && current.phone ? current.phone : '');
+        const exactPhone = currentPhone && incomingPhone && currentPhone === incomingPhone ? 1 : 0;
+        const sameName = normalizedName(current && current.name ? current.name : '') === normalizedName(incomingLead && incomingLead.name ? incomingLead.name : '') ? 1 : 0;
+        const support = matchSupportScore(current, incomingLead);
+        const score = (exactPhone * 100) + (sameName * 10) + support;
+
+        if (score > bestScore) {
+            bestScore = score;
+            bestIdx = i;
+        }
+    }
+    return bestIdx;
+}
+
+function findBestNameMatchIndex(list, incomingLead) {
+    const incomingName = normalizedName(incomingLead && incomingLead.name ? incomingLead.name : '');
+    if (!incomingName) return -1;
+
+    let bestIdx = -1;
+    let bestScore = -1;
+    for (let i = 0; i < list.length; i++) {
+        const current = list[i];
+        const currentName = normalizedName(current && current.name ? current.name : '');
+        if (!currentName || currentName !== incomingName) continue;
+
+        const support = matchSupportScore(current, incomingLead);
+        if (support > bestScore) {
+            bestScore = support;
+            bestIdx = i;
+        }
+    }
+    return bestIdx;
+}
+
+function pickIncomingOrExisting(field, existingLead, incomingLead) {
+    if (!hasImportMetadata(incomingLead)) return incomingLead[field];
+    return hasProvidedImportField(incomingLead, field) ? incomingLead[field] : existingLead[field];
+}
+
+function mergeMatchedLead(existingLead, incomingLead) {
+    const current = existingLead && typeof existingLead === 'object' ? existingLead : {};
+    const incoming = incomingLead && typeof incomingLead === 'object' ? incomingLead : {};
+
+    const merged = {
+        ...current,
+        name: pickIncomingOrExisting('name', current, incoming),
+        phone: pickIncomingOrExisting('phone', current, incoming),
+        origin: pickIncomingOrExisting('origin', current, incoming),
+        value: pickIncomingOrExisting('value', current, incoming),
+        nextStep: pickIncomingOrExisting('nextStep', current, incoming),
+        stage: pickIncomingOrExisting('stage', current, incoming),
+        lossReason: pickIncomingOrExisting('lossReason', current, incoming),
+        obs: pickIncomingOrExisting('obs', current, incoming),
+        owner: pickIncomingOrExisting('owner', current, incoming),
+        tags: pickIncomingOrExisting('tags', current, incoming),
+        tasks: pickIncomingOrExisting('tasks', current, incoming),
+        createdAt: pickIncomingOrExisting('createdAt', current, incoming),
+        updatedAt: Date.now()
+    };
+
+    merged.id = current.id;
+    if (!STAGES.includes(merged.stage)) merged.stage = current.stage || 'Novo lead';
+    if (merged.stage !== 'Perdido') merged.lossReason = '';
+
+    const normalized = normalizeImportedLeads([stripImportMetaFromLead(merged)]);
+    if (normalized.ok && Array.isArray(normalized.leads) && normalized.leads[0]) {
+        normalized.leads[0].id = current.id;
+        normalized.leads[0].updatedAt = Date.now();
+        return normalized.leads[0];
+    }
+    return stripImportMetaFromLead(merged);
+}
+
+function mergeLeadsAdditive(existingLeads, importedLeads) {
+    const base = stripImportMetaFromLeads(existingLeads);
+    const incoming = Array.isArray(importedLeads) ? importedLeads : [];
+    const merged = Array.isArray(base) ? [...base] : [];
+
+    let added = 0;
+    let updated = 0;
+
+    for (const lead of incoming) {
+        if (!lead || typeof lead !== 'object') continue;
+
+        const incomingId = sanitizeString(lead.id, 200);
+        let matchIdx = -1;
+
+        if (incomingId) {
+            matchIdx = merged.findIndex((l) => sanitizeString(l && l.id ? l.id : '', 200) === incomingId);
+        }
+        if (matchIdx < 0) {
+            matchIdx = findBestPhoneMatchIndex(merged, lead);
+        }
+        if (matchIdx < 0) {
+            matchIdx = findBestNameMatchIndex(merged, lead);
+        }
+
+        if (matchIdx >= 0) {
+            merged[matchIdx] = mergeMatchedLead(merged[matchIdx], lead);
+            updated++;
+            continue;
+        }
+
+        merged.push(stripImportMetaFromLead(lead));
+        added++;
+    }
+
+    return { merged: stripImportMetaFromLeads(merged), added, updated };
+}
+
 async function importDataJson(file) {
     if (!canWrite()) return;
     if (!file) {
@@ -321,12 +891,40 @@ async function importDataJson(file) {
         alert(res.error);
         return;
     }
+    if (!isAdmin() && currentSession && currentSession.user) {
+        const me = sanitizeString(currentSession.user, 60).toLowerCase();
+        res.leads.forEach((l) => { l.owner = me; });
+    }
 
-    const ok = confirm(`Importar ${res.leads.length} lead(s)?\n\nIsso vai SUBSTITUIR os leads atuais (${leads.length}).`);
+    const mergeMode = document.getElementById('import-merge-toggle')?.checked ?? true;
+
+    let existing = leads;
+    if (backendOnline) {
+        try {
+            existing = await apiGetLeads();
+        } catch {
+            existing = leads;
+        }
+    }
+
+    let nextLeads = res.leads;
+    let prompt = `Importar ${res.leads.length} lead(s)?`;
+
+    if (mergeMode) {
+        const preview = mergeLeadsAdditive(existing, res.leads);
+        nextLeads = preview.merged;
+        prompt += `\n\nModo: MESCLAR (não apaga).`;
+        prompt += `\nNovos: ${preview.added} | Atualizados: ${preview.updated} | Total após: ${nextLeads.length}`;
+    } else {
+        prompt += `\n\nModo: SUBSTITUIR (apaga os atuais).`;
+        prompt += `\nLeads atuais: ${Array.isArray(existing) ? existing.length : 0} | Total após: ${nextLeads.length}`;
+    }
+
+    const ok = confirm(prompt);
     if (!ok) return;
 
     maybeCreateBackupFromPersisted({ force: true });
-    leads = res.leads;
+    leads = stripImportMetaFromLeads(nextLeads);
 
     if (backendOnline) {
         try {
@@ -363,8 +961,11 @@ function initDataModal() {
     dataModalInitialized = true;
 
     const fileInput = document.getElementById('import-file');
+    const xlsxFileInput = document.getElementById('import-xlsx-file');
     const btnImport = document.getElementById('btn-import-json');
     const btnExport = document.getElementById('btn-export-json');
+    const btnImportXlsx = document.getElementById('btn-import-xlsx');
+    const btnExportXlsx = document.getElementById('btn-export-xlsx');
     const toggle = document.getElementById('auto-backup-toggle');
     const btnRestore = document.getElementById('btn-restore-backup');
     const btnClearBackups = document.getElementById('btn-clear-backups');
@@ -378,6 +979,8 @@ function initDataModal() {
 
     if (btnExport) btnExport.onclick = exportDataJson;
     if (btnImport) btnImport.onclick = () => importDataJson(fileInput && fileInput.files ? fileInput.files[0] : null);
+    if (btnExportXlsx) btnExportXlsx.onclick = exportDataXlsx;
+    if (btnImportXlsx) btnImportXlsx.onclick = () => importDataXlsx(xlsxFileInput && xlsxFileInput.files ? xlsxFileInput.files[0] : null);
     if (toggle) {
         toggle.checked = isAutoBackupEnabled();
         toggle.onchange = () => {
@@ -488,6 +1091,8 @@ function initDataModal() {
     const writable = canWrite();
     if (fileInput) fileInput.disabled = !writable;
     if (btnImport) btnImport.disabled = !writable;
+    if (xlsxFileInput) xlsxFileInput.disabled = !writable;
+    if (btnImportXlsx) btnImportXlsx.disabled = !writable;
     if (toggle) toggle.disabled = !writable;
     if (btnClearData) btnClearData.disabled = !writable;
 
@@ -625,55 +1230,269 @@ function leadMatchesFilter(lead) {
     return hay.includes(filterText);
 }
 
-// --- KANBAN ---
-function renderKanban(container) {
-    const board = document.createElement('div');
-    board.className = 'kanban-board';
+function getVisibleLeads() {
+    const base = Array.isArray(leads) ? leads : [];
+    if (!currentSession || currentSession.role === 'admin' || currentSession.role === 'leitura') return base;
+    const me = sanitizeString(currentSession.user || '', 60).toLowerCase();
+    if (!me) return [];
+    return base.filter((l) => sanitizeString(l && l.owner ? l.owner : '', 60).toLowerCase() === me);
+}
 
-    STAGES.forEach(stage => {
-        const col = document.createElement('div');
-        col.className = 'kanban-col';
-        const filtered = leads.filter(l => l.stage === stage && leadMatchesFilter(l));
-
-        col.innerHTML = `<div class="col-header">${stage} <span>${filtered.length}</span></div>`;
-        const list = document.createElement('div');
-        list.className = 'card-list';
-
-        filtered.forEach(lead => {
-            const card = document.createElement('div');
-            card.className = `lead-card ${stage === 'Fechado' ? 'won' : stage === 'Perdido' ? 'lost' : ''} ${canWrite() ? '' : 'readonly'}`;
-            if (canWrite()) card.onclick = () => openEditModal(lead.id);
-            card.innerHTML = `
-                <div class="tag">${lead.origin}</div>
-                <div class="name">${lead.name}</div>
-                <div class="created">📅 ${formatDateOnly(lead.createdAt ?? lead.id)}</div>
-                ${lead.phone ? `<div class="phone">📱 ${lead.phone}</div>` : ''}
-                <div class="val">R$ ${Number(lead.value).toLocaleString()}</div>
-                <div class="next">👣 ${lead.nextStep || 'Sem passo definido'}</div>
-                ${(Array.isArray(lead.tags) && lead.tags.length)
-                    ? `<div class="chips">${lead.tags.slice(0, 6).map(t => `<span class="chip">${t}</span>`).join('')}</div>`
-                    : ''
-                }
-                ${lead.owner ? `<div class="consultor-badge">${lead.owner}</div>` : ''}
-            `;
-            list.appendChild(card);
-        });
-        col.appendChild(list);
-        board.appendChild(col);
+function getDashboardLeads() {
+    const base = getVisibleLeads();
+    return base.filter((l) => {
+        if (!leadMatchesFilter(l)) return false;
+        if (dashboardOwnerFilter === 'all') return true;
+        if (dashboardOwnerFilter === '__none__') return !sanitizeString(l.owner, 200);
+        return sanitizeString(l.owner, 200) === dashboardOwnerFilter;
     });
-    container.appendChild(board);
+}
+
+function getDashboardOwnerOptions() {
+    const owners = new Set();
+    let hasNone = false;
+
+    for (const l of getVisibleLeads()) {
+        const owner = sanitizeString(l && l.owner ? l.owner : '', 60);
+        if (owner) owners.add(owner);
+        else hasNone = true;
+    }
+
+    const sorted = Array.from(owners).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+
+    const opts = [{ value: 'all', label: 'Todos' }];
+    if (hasNone) opts.push({ value: '__none__', label: 'Sem consultor' });
+    for (const o of sorted) opts.push({ value: o, label: o });
+
+    if (!opts.some((o) => o.value === dashboardOwnerFilter)) dashboardOwnerFilter = 'all';
+    return opts;
+}
+
+function setDashboardOwnerFilter(value) {
+    dashboardOwnerFilter = String(value || 'all');
+    localStorage.setItem('sov_dash_owner', dashboardOwnerFilter);
+    renderApp();
+}
+
+// --- KANBAN ---
+function ensureKanbanState() {
+    if (kanbanActiveTab !== KANBAN_GENERAL_TAB && !KANBAN_STAGE_TABS.includes(kanbanActiveTab)) {
+        kanbanActiveTab = KANBAN_GENERAL_TAB;
+    }
+    if (!kanbanVisibleByStage || typeof kanbanVisibleByStage !== 'object') {
+        kanbanVisibleByStage = {};
+    }
+    for (const stage of STAGES) {
+        const current = Number(kanbanVisibleByStage[stage]);
+        if (!Number.isFinite(current) || current <= 0) {
+            kanbanVisibleByStage[stage] = KANBAN_INITIAL_VISIBLE;
+        }
+    }
+}
+
+function getKanbanVisibleCount(stage) {
+    ensureKanbanState();
+    return Number(kanbanVisibleByStage[stage]) || KANBAN_INITIAL_VISIBLE;
+}
+
+function setKanbanVisibleCount(stage, nextCount) {
+    ensureKanbanState();
+    const safe = Math.max(KANBAN_INITIAL_VISIBLE, Number(nextCount) || KANBAN_INITIAL_VISIBLE);
+    kanbanVisibleByStage[stage] = safe;
+}
+
+function createLeadCard(lead, stage) {
+    const card = document.createElement('div');
+    card.className = `lead-card ${stage === 'Fechado' ? 'won' : stage === 'Perdido' ? 'lost' : ''} ${canWrite() ? '' : 'readonly'}`;
+    if (canWrite()) card.onclick = () => openEditModal(lead.id);
+    card.innerHTML = `
+        <div class="tag">${lead.origin}</div>
+        <div class="name">${lead.name}</div>
+        <div class="created">📅 ${formatDateOnly(lead.createdAt ?? lead.id)}</div>
+        ${lead.phone ? `<div class="phone">📱 ${lead.phone}</div>` : ''}
+        <div class="val">R$ ${Number(lead.value).toLocaleString()}</div>
+        <div class="next">👣 ${lead.nextStep || 'Sem passo definido'}</div>
+        ${(Array.isArray(lead.tags) && lead.tags.length)
+            ? `<div class="chips">${lead.tags.slice(0, 6).map((t) => `<span class="chip">${t}</span>`).join('')}</div>`
+            : ''
+        }
+        ${lead.owner ? `<div class="consultor-badge">${lead.owner}</div>` : ''}
+    `;
+    return card;
+}
+
+function appendKanbanShowButtons(parent, stage, total, shown) {
+    if (total <= shown) return;
+    const controls = document.createElement('div');
+    controls.className = 'kanban-show-controls';
+
+    const btnMore = document.createElement('button');
+    btnMore.type = 'button';
+    btnMore.className = 'btn-secondary btn-small';
+    btnMore.textContent = 'Mostrar mais';
+    btnMore.onclick = () => {
+        setKanbanVisibleCount(stage, shown + KANBAN_VISIBLE_STEP);
+        renderApp();
+    };
+
+    const btnAll = document.createElement('button');
+    btnAll.type = 'button';
+    btnAll.className = 'btn-secondary btn-small';
+    btnAll.textContent = 'Mostrar tudo';
+    btnAll.onclick = () => {
+        setKanbanVisibleCount(stage, total);
+        renderApp();
+    };
+
+    controls.appendChild(btnMore);
+    controls.appendChild(btnAll);
+    parent.appendChild(controls);
+}
+
+function appendKanbanGeneralShowButtons(parent, stageMeta) {
+    const rows = Array.isArray(stageMeta) ? stageMeta : [];
+    if (!rows.some((r) => Number(r.total) > Number(r.shown))) return;
+
+    const controls = document.createElement('div');
+    controls.className = 'kanban-show-controls';
+
+    const btnMore = document.createElement('button');
+    btnMore.type = 'button';
+    btnMore.className = 'btn-secondary btn-small';
+    btnMore.textContent = 'Mostrar mais';
+    btnMore.onclick = () => {
+        for (const row of rows) {
+            if (!row || !row.stage) continue;
+            if (Number(row.total) <= Number(row.shown)) continue;
+            const next = Math.min(Number(row.total), Number(row.shown) + KANBAN_VISIBLE_STEP);
+            setKanbanVisibleCount(row.stage, next);
+        }
+        renderApp();
+    };
+
+    const btnAll = document.createElement('button');
+    btnAll.type = 'button';
+    btnAll.className = 'btn-secondary btn-small';
+    btnAll.textContent = 'Mostrar tudo';
+    btnAll.onclick = () => {
+        for (const row of rows) {
+            if (!row || !row.stage) continue;
+            setKanbanVisibleCount(row.stage, Number(row.total));
+        }
+        renderApp();
+    };
+
+    controls.appendChild(btnMore);
+    controls.appendChild(btnAll);
+    parent.appendChild(controls);
+}
+
+function renderKanban(container) {
+    ensureKanbanState();
+    const root = document.createElement('div');
+    root.className = 'kanban-root';
+
+    const visible = getVisibleLeads().filter((l) => leadMatchesFilter(l));
+    const counts = {};
+    for (const stage of STAGES) counts[stage] = visible.filter((l) => l.stage === stage).length;
+
+    const tabs = document.createElement('div');
+    tabs.className = 'kanban-tabs';
+    const tabItems = [{ key: KANBAN_GENERAL_TAB, label: 'Geral', count: visible.length }].concat(
+        KANBAN_STAGE_TABS.map((stage) => ({ key: stage, label: stage, count: counts[stage] || 0 }))
+    );
+    for (const tab of tabItems) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `kanban-tab-btn ${kanbanActiveTab === tab.key ? 'active' : ''}`;
+        btn.textContent = `${tab.label} (${tab.count})`;
+        btn.onclick = () => {
+            kanbanActiveTab = tab.key;
+            renderApp();
+        };
+        tabs.appendChild(btn);
+    }
+    root.appendChild(tabs);
+
+    if (kanbanActiveTab === KANBAN_GENERAL_TAB) {
+        const board = document.createElement('div');
+        board.className = 'kanban-board';
+        const stageMeta = [];
+
+        for (const stage of STAGES) {
+            const stageLeads = visible.filter((l) => l.stage === stage);
+            const visibleCount = getKanbanVisibleCount(stage);
+            const shown = stageLeads.slice(0, visibleCount);
+
+            const col = document.createElement('div');
+            col.className = 'kanban-col';
+            col.innerHTML = `<div class="col-header">${stage} <span>${counts[stage]}</span></div>`;
+
+            const list = document.createElement('div');
+            list.className = 'card-list';
+            for (const lead of shown) list.appendChild(createLeadCard(lead, stage));
+            col.appendChild(list);
+            board.appendChild(col);
+            stageMeta.push({ stage, total: stageLeads.length, shown: shown.length });
+        }
+        root.appendChild(board);
+        appendKanbanGeneralShowButtons(root, stageMeta);
+        container.appendChild(root);
+        return;
+    }
+
+    const stage = kanbanActiveTab;
+    const stageLeads = visible.filter((l) => l.stage === stage);
+    const visibleCount = getKanbanVisibleCount(stage);
+    const shown = stageLeads.slice(0, visibleCount);
+
+    const stageView = document.createElement('div');
+    stageView.className = 'kanban-stage-view';
+    stageView.innerHTML = `<div class="col-header">${stage} <span>${stageLeads.length}</span></div>`;
+
+    const grid = document.createElement('div');
+    grid.className = 'kanban-stage-grid';
+    for (const lead of shown) grid.appendChild(createLeadCard(lead, stage));
+    stageView.appendChild(grid);
+
+    if (shown.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'kanban-empty';
+        empty.textContent = 'Nenhum lead encontrado para esta etapa.';
+        stageView.appendChild(empty);
+    }
+
+    appendKanbanShowButtons(stageView, stage, stageLeads.length, shown.length);
+    root.appendChild(stageView);
+    container.appendChild(root);
 }
 
 // --- DASHBOARD (cards + tabelas + gráfico com tipo selecionável) ---
 function renderDashboard(container) {
-    const totalValue = leads.reduce((acc, curr) => acc + Number(curr.value), 0);
-    const wonLeads = leads.filter(l => l.stage === 'Fechado');
-    const lostLeads = leads.filter(l => l.stage === 'Perdido');
+    const viewLeads = getDashboardLeads();
+    const ownerOptions = getDashboardOwnerOptions();
+
+    const totalValue = viewLeads.reduce((acc, curr) => acc + Number(curr.value), 0);
+    const wonLeads = viewLeads.filter(l => l.stage === 'Fechado');
+    const lostLeads = viewLeads.filter(l => l.stage === 'Perdido');
     const totalWon = wonLeads.reduce((acc, curr) => acc + Number(curr.value), 0);
-    const activeLeads = leads.filter(l => l.stage !== 'Fechado' && l.stage !== 'Perdido');
-    const conversion = leads.length > 0 ? ((wonLeads.length / leads.length) * 100).toFixed(1) : '0.0';
+    const activeLeads = viewLeads.filter(l => l.stage !== 'Fechado' && l.stage !== 'Perdido');
+    const conversion = viewLeads.length > 0 ? ((wonLeads.length / viewLeads.length) * 100).toFixed(1) : '0.0';
 
     container.innerHTML = `
+        <div class="chart-controls dash-controls">
+            <div>
+                <h4>Relatorio</h4>
+                <div class="hint">Filtre por consultor para ver o relatorio de cada um.</div>
+            </div>
+            <div class="dash-filters">
+                <label>Consultor</label>
+                <select id="dash-owner" onchange="setDashboardOwnerFilter(this.value)">
+                    ${ownerOptions.map(o => `<option value="${o.value}" ${o.value === dashboardOwnerFilter ? 'selected' : ''}>${o.label}</option>`).join('')}
+                </select>
+            </div>
+        </div>
+
         <div class="dash-grid">
             <div class="stat-card">
                 <span class="label">Volume Total</span>
@@ -739,22 +1558,22 @@ function renderDashboard(container) {
     if (sel) sel.value = currentChartType;
 
     // Chamamos a função do gráfico após o HTML ser inserido
-    initSalesChart(currentChartType);
+    initSalesChart(currentChartType, viewLeads);
 }
 
 function setChartType(type) {
     currentChartType = type;
     localStorage.setItem('sov_chart_type', type);
-    initSalesChart(type);
+    initSalesChart(type, getDashboardLeads());
 }
 
 // --- Inicializar / Atualizar o Gráfico Interativo ---
-function initSalesChart(type = 'bar') {
+function initSalesChart(type = 'bar', inputLeads = leads) {
     const ctx = document.getElementById('salesChart').getContext('2d');
     
     // Preparar dados: Soma de valores por etapa
     const dataByStage = STAGES.map(stage => {
-        return leads
+        return (Array.isArray(inputLeads) ? inputLeads : [])
             .filter(l => l.stage === stage)
             .reduce((acc, curr) => acc + Number(curr.value), 0);
     });
@@ -778,6 +1597,7 @@ function initSalesChart(type = 'bar') {
                 label: 'Valor Total (R$)',
                 data: dataByStage,
                 backgroundColor: [
+                    'rgba(6, 182, 212, 0.6)',  // Leads do site
                     'rgba(37, 99, 235, 0.6)',  // Novo lead
                     'rgba(59, 130, 246, 0.6)', // Qualificação
                     'rgba(96, 165, 250, 0.6)', // Simulação
@@ -982,6 +1802,71 @@ async function addNewLead() {
     renderApp();
 }
 
+function buildOwnerOptionsHtml(selectedOwner, usernames) {
+    const selected = sanitizeString(selectedOwner || '', 60).toLowerCase();
+    const list = (Array.isArray(usernames) ? usernames : [])
+        .map((u) => sanitizeString(u, 60).toLowerCase())
+        .filter(Boolean);
+
+    const fromLeads = getVisibleLeads()
+        .map((l) => sanitizeString(l && l.owner ? l.owner : '', 60).toLowerCase())
+        .filter(Boolean);
+
+    const merged = list.length ? list.concat(fromLeads) : fromLeads;
+    if (currentSession && currentSession.user) merged.push(sanitizeString(currentSession.user, 60).toLowerCase());
+
+    const unique = Array.from(new Set(merged))
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+
+    const finalList = selected && !unique.includes(selected) ? [selected, ...unique] : unique;
+
+    return [
+        `<option value="" ${selected ? '' : 'selected'}>&mdash;</option>`,
+        ...finalList.map((u) => `<option value="${u}" ${u === selected ? 'selected' : ''}>${u}</option>`)
+    ].join('');
+}
+
+function buildOwnerOptionsHtmlV2(selectedOwner, usernames) {
+    const selected = sanitizeString(selectedOwner || '', 60).toLowerCase();
+    const list = (Array.isArray(usernames) ? usernames : [])
+        .map((u) => sanitizeString(u, 60).toLowerCase())
+        .filter(Boolean);
+
+    const fromLeads = getVisibleLeads()
+        .map((l) => sanitizeString(l && l.owner ? l.owner : '', 60).toLowerCase())
+        .filter(Boolean);
+
+    const merged = list.length ? list.concat(fromLeads) : fromLeads;
+    if (currentSession && currentSession.user) merged.push(sanitizeString(currentSession.user, 60).toLowerCase());
+
+    const unique = Array.from(new Set(merged))
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+
+    const finalList = selected && !unique.includes(selected) ? [selected, ...unique] : unique;
+
+    return [
+        `<option value="" ${selected ? '' : 'selected'}>&mdash;</option>`,
+        ...finalList.map((u) => `<option value="${u}" ${u === selected ? 'selected' : ''}>${u}</option>`)
+    ].join('');
+}
+
+async function populateOwnerSelect(selectedOwner) {
+    const select = document.getElementById('ed-owner');
+    if (!select) return;
+    select.innerHTML = buildOwnerOptionsHtmlV2(selectedOwner);
+    if (!backendOnline || !isAdmin()) return;
+
+    try {
+        const users = await apiListUsers();
+        const usernames = (Array.isArray(users) ? users : [])
+            .map((u) => (u && u.user ? String(u.user) : ''))
+            .filter(Boolean);
+        select.innerHTML = buildOwnerOptionsHtmlV2(selectedOwner, usernames);
+    } catch { }
+}
+
 function openEditModal(id) {
     if (!canWrite()) return;
     const lead = leads.find(l => l.id === id);
@@ -1041,8 +1926,13 @@ function openEditModal(id) {
                     </div>
                     <div class="tk-list">
                         ${tasks.map((t, i) => `
-                            <div class="tk-item ${t.done ? 'done' : ''}">
-                                <span onclick='toggleTask(${leadId}, ${i})'>${t.done ? '✅' : '⭕'} ${t.desc}</span>
+                            <div class="tk-item ${t.done ? 'done' : ''}" onclick='toggleTask(${leadId}, ${i})'>
+                                <div class="tk-item-row">
+                                    <span>${t.done ? '✅' : '⭕'} Tarefa ${i + 1} • ${coerceEpochMs(t && t.createdAt) ? formatDateOnly(t.createdAt) : 'sem data'} — ${t.desc}</span>
+                                    <button type="button" class="tk-del" title="Excluir tarefa" onclick='event.stopPropagation(); deleteTask(${leadId}, ${i})'>
+                                        <i class="ph ph-trash"></i>
+                                    </button>
+                                </div>
                             </div>
                         `).join('')}
                     </div>
@@ -1051,6 +1941,13 @@ function openEditModal(id) {
         </div>
     `;
     toggleModal('modal-edit', true);
+    if (isAdmin()) {
+        const firstField = modal.querySelector('.edit-main .field');
+        if (firstField) {
+            firstField.innerHTML = `<label>Consultor</label><select id="ed-owner">${buildOwnerOptionsHtmlV2(lead.owner)}</select>`;
+            populateOwnerSelect(lead.owner);
+        }
+    }
 }
 
 function checkLoss(val) {
@@ -1065,6 +1962,10 @@ async function saveEdit(id) {
     const now = Date.now();
     if (!coerceEpochMs(lead.createdAt)) lead.createdAt = coerceEpochMs(lead.id) ?? now;
     lead.updatedAt = now;
+    if (isAdmin()) {
+        const ownerEl = document.getElementById('ed-owner');
+        if (ownerEl) lead.owner = sanitizeString(ownerEl.value, 60).toLowerCase();
+    }
     lead.stage = document.getElementById('ed-stage').value;
     lead.value = Number(document.getElementById('ed-value').value) || 0;
     lead.phone = sanitizePhone(document.getElementById('ed-phone') ? document.getElementById('ed-phone').value : '', 30);
@@ -1121,8 +2022,11 @@ async function addTask(id) {
     const lead = leads.find(l => l.id === id);
     if (!lead) return;
     if (!Array.isArray(lead.tasks)) lead.tasks = [];
-    lead.tasks.push({ desc, done: false });
-    lead.updatedAt = Date.now();
+    const now = Date.now();
+    lead.tasks.push({ desc, done: false, createdAt: now });
+    lead.updatedAt = now;
+    const input = document.getElementById('tk-new');
+    if (input) input.value = '';
 
     if (backendOnline) {
         try {
@@ -1159,6 +2063,34 @@ async function toggleTask(id, idx) {
     openEditModal(id);
 }
 
+async function deleteTask(id, idx) {
+    if (!canWrite()) return;
+    const lead = leads.find(l => l.id === id);
+    if (!lead || !Array.isArray(lead.tasks) || !lead.tasks[idx]) return;
+
+    const ok = confirm('Excluir esta tarefa?');
+    if (!ok) return;
+
+    // Destrutivo: cria backup do estado atual mesmo com backup automático desligado
+    maybeCreateBackupFromPersisted({ force: true });
+
+    lead.tasks.splice(idx, 1);
+    lead.updatedAt = Date.now();
+
+    if (backendOnline) {
+        try {
+            const saved = await apiUpdateLead(lead.id, lead);
+            const leadIdx = leads.findIndex(l => l.id === id);
+            if (leadIdx >= 0) leads[leadIdx] = saved;
+        } catch (e) {
+            if (handleApiFailure(e, 'Não foi possível salvar tarefas no servidor.')) return;
+        }
+    }
+
+    save();
+    openEditModal(id);
+}
+
 function save() {
     maybeCreateBackupFromPersisted();
     localStorage.setItem(CRM_DATA_KEY, JSON.stringify(leads));
@@ -1166,3 +2098,4 @@ function save() {
 }
 
 init();
+
